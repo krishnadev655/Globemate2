@@ -1,119 +1,138 @@
-// ============ SHARED AUTH UTILITIES (Supabase) ============
+// ============ SHARED AUTH UTILITIES (Firebase) ============
 const Auth = (() => {
-  let supabaseClient = null;
+  let firebaseAuth = null;
+  let firebaseDB = null;
   let currentUser = null;
 
-  // Initialize Supabase client
-  function initSupabase() {
+  // Initialize Firebase client
+  function initFirebase() {
     try {
-      if (typeof window.supabase === 'undefined') {
-        console.error('Supabase library not loaded');
+      if (typeof firebase === 'undefined') {
+        console.error('Firebase library not loaded');
         return false;
       }
-      const url = window.SUPABASE_URL || '';
-      const key = window.SUPABASE_ANON_KEY || '';
-      if (!url || !key) {
-        console.error('Supabase credentials not configured');
+      const config = window.FIREBASE_CONFIG;
+      if (!config || !config.apiKey) {
+        console.error('Firebase credentials not configured');
         return false;
       }
-      supabaseClient = window.supabase.createClient(url, key);
-      console.log('✅ Supabase initialized');
+      if (!firebase.apps.length) {
+        firebase.initializeApp(config);
+      }
+      firebaseAuth = firebase.auth();
+      firebaseDB = firebase.firestore();
+      console.log('✅ Firebase initialized');
       return true;
     } catch (e) {
-      console.error('Supabase init error:', e);
+      console.error('Firebase init error:', e);
       return false;
     }
   }
 
-  // Ensure Supabase is ready
-  function getClient() {
-    if (!supabaseClient) initSupabase();
-    return supabaseClient;
+  // Ensure Firebase Auth is ready
+  function getAuth() {
+    if (!firebaseAuth) initFirebase();
+    return firebaseAuth;
   }
 
-  // Check existing session on app load
-  async function checkSession() {
-    const client = getClient();
-    if (!client) return null;
-    try {
-      const { data: { session } } = await client.auth.getSession();
-      if (session) {
-        currentUser = session.user;
-        applyLoggedInUI();
-        return session.user;
-      }
-      restoreLoggedOutUI();
-      return null;
-    } catch (e) {
-      console.error('Session check error:', e);
-      return null;
-    }
+  // Ensure Firestore is ready
+  function getDB() {
+    if (!firebaseDB) initFirebase();
+    return firebaseDB;
+  }
+
+  // Check existing session on app load (uses onAuthStateChanged)
+  function checkSession() {
+    return new Promise((resolve) => {
+      const auth = getAuth();
+      if (!auth) { restoreLoggedOutUI(); resolve(null); return; }
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        unsubscribe();
+        if (user) {
+          currentUser = user;
+          applyLoggedInUI();
+          resolve(user);
+        } else {
+          restoreLoggedOutUI();
+          resolve(null);
+        }
+      });
+    });
   }
 
   // Sign up new user
   async function signUp(name, email, password) {
-    const client = getClient();
-    if (!client) return { success: false, error: 'Auth service unavailable' };
+    const auth = getAuth();
+    if (!auth) return { success: false, error: 'Auth service unavailable' };
 
     try {
-      const { data, error } = await client.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: name } }
-      });
+      const credential = await auth.createUserWithEmailAndPassword(email, password);
+      await credential.user.updateProfile({ displayName: name });
+      currentUser = credential.user;
 
-      if (error) {
-        if (error.status === 429 || error.code === 'over_email_send_rate_limit') {
-          throw new Error('Rate limit hit. Disable email confirmation in Supabase or wait a few minutes.');
-        }
-        throw error;
-      }
-
-      if (data.user) {
-        currentUser = data.user;
-        // Save profile to DB
-        await client.from('profiles').insert([{
-          id: data.user.id,
+      // Save profile to Firestore
+      const db = getDB();
+      if (db) {
+        await db.collection('profiles').doc(credential.user.uid).set({
           full_name: name,
           email,
           created_at: new Date().toISOString()
-        }]).then(({ error: pErr }) => {
-          if (pErr) console.warn('Profile insert warning:', pErr.message);
         });
-        return { success: true, user: data.user };
       }
-      return { success: false, error: 'Sign up failed' };
+      return { success: true, user: credential.user };
     } catch (e) {
       console.error('SignUp error:', e);
-      return { success: false, error: e.message };
+      return { success: false, error: firebaseErrorMessage(e) };
     }
   }
 
   // Log in existing user
   async function login(email, password) {
-    const client = getClient();
-    if (!client) return { success: false, error: 'Auth service unavailable' };
+    const auth = getAuth();
+    if (!auth) return { success: false, error: 'Auth service unavailable' };
 
     try {
-      const { data, error } = await client.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      if (data.session) {
-        currentUser = data.user;
-        return { success: true, user: data.user };
-      }
-      return { success: false, error: 'Login failed' };
+      const credential = await auth.signInWithEmailAndPassword(email, password);
+      currentUser = credential.user;
+      return { success: true, user: credential.user };
     } catch (e) {
       console.error('Login error:', e);
-      return { success: false, error: e.message };
+      return { success: false, error: firebaseErrorMessage(e) };
+    }
+  }
+
+  // Google Sign-In (popup)
+  async function signInWithGoogle() {
+    const auth = getAuth();
+    if (!auth) return { success: false, error: 'Auth service unavailable' };
+
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      const credential = await auth.signInWithPopup(provider);
+      currentUser = credential.user;
+
+      // Upsert profile in Firestore
+      const db = getDB();
+      if (db) {
+        await db.collection('profiles').doc(credential.user.uid).set({
+          full_name: credential.user.displayName || '',
+          email: credential.user.email,
+          created_at: new Date().toISOString()
+        }, { merge: true });
+      }
+      return { success: true, user: credential.user };
+    } catch (e) {
+      console.error('Google sign-in error:', e);
+      return { success: false, error: firebaseErrorMessage(e) };
     }
   }
 
   // Logout
   async function logout() {
-    const client = getClient();
-    if (!client) return;
+    const auth = getAuth();
+    if (!auth) return;
     try {
-      await client.auth.signOut();
+      await auth.signOut();
       currentUser = null;
       restoreLoggedOutUI();
       showToast('Logged out successfully', 'success');
@@ -124,11 +143,28 @@ const Auth = (() => {
     }
   }
 
+  // Convert Firebase error codes to friendly messages
+  function firebaseErrorMessage(e) {
+    const map = {
+      'auth/email-already-in-use': 'This email is already registered.',
+      'auth/invalid-email': 'Invalid email address.',
+      'auth/weak-password': 'Password should be at least 6 characters.',
+      'auth/user-not-found': 'No account found with this email.',
+      'auth/wrong-password': 'Incorrect password.',
+      'auth/invalid-credential': 'Invalid email or password.',
+      'auth/too-many-requests': 'Too many attempts. Please try again later.',
+      'auth/network-request-failed': 'Network error. Check your connection.',
+      'auth/popup-closed-by-user': 'Sign-in popup was closed.',
+      'auth/cancelled-popup-request': 'Sign-in popup was cancelled.'
+    };
+    return map[e.code] || e.message;
+  }
+
   // ---- UI helpers when logged in ----
 
   function applyLoggedInUI() {
     if (!currentUser) return;
-    const userName = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'User';
+    const userName = currentUser.displayName || currentUser.email?.split('@')[0] || 'User';
 
     // Show nav links and mobile toggle
     const navLinksEl = document.getElementById('navLinks');
@@ -216,7 +252,7 @@ const Auth = (() => {
 
   function getUserName() {
     if (!currentUser) return null;
-    return currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'User';
+    return currentUser.displayName || currentUser.email?.split('@')[0] || 'User';
   }
 
   function preventNavLogoClick(event) {
@@ -235,12 +271,14 @@ const Auth = (() => {
   }
 
   return {
-    initSupabase,
-    getClient,
+    initFirebase,
+    getAuth,
+    getDB,
     checkSession,
     signUp,
     login,
     logout,
+    signInWithGoogle,
     applyLoggedInUI,
     restoreLoggedOutUI,
     getUserName,
@@ -249,8 +287,8 @@ const Auth = (() => {
   };
 })();
 
-// Initialize Supabase immediately on script load
-Auth.initSupabase();
+// Initialize Firebase immediately on script load
+Auth.initFirebase();
 
 // Check for existing session and apply UI on app load
 document.addEventListener('DOMContentLoaded', () => {

@@ -74,10 +74,15 @@
       const googleBtn = document.getElementById('googleRegisterBtn');
       if (googleBtn) {
         googleBtn.addEventListener('click', async () => {
-          const client = Auth.getClient();
-          if (client) {
-            const { error } = await client.auth.signInWithOAuth({ provider: 'google' });
-            if (error) showToast(error.message, 'error');
+          const result = await Auth.signInWithGoogle();
+          if (result.success) {
+            showToast('Account created! Welcome to GlobeMate.', 'success');
+            Auth.applyLoggedInUI();
+            setTimeout(() => {
+              if (window.PageLoader) window.PageLoader.loadPage('country-info');
+            }, 1000);
+          } else {
+            showToast(result.error || 'Google sign-up failed.', 'error');
           }
         });
       }

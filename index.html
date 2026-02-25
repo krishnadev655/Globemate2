@@ -87,13 +87,23 @@
 
   <!-- Core Libraries -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-  <!-- Supabase Configuration -->
+
+  <!-- Firebase SDKs (compat v9) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- Firebase Configuration -->
   <script>
-    // TODO: Replace these with your actual Supabase credentials
-    window.SUPABASE_URL = 'https://zucibmuisijwpgcfnkds.supabase.co';
-    window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1Y2libXVpc2lqd3BnY2Zua2RzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExMTM4MTIsImV4cCI6MjA4NjY4OTgxMn0.qlkuUthCeExkudOBBM-ntdrB1Aod-ZPJJfAp-oGoma4';
+    window.FIREBASE_CONFIG = {
+      apiKey: "AIzaSyCirIpD00mQImLtL_495iDiZFoezJ4K0a8",
+      authDomain: "globemate-1e954.firebaseapp.com",
+      projectId: "globemate-1e954",
+      storageBucket: "globemate-1e954.firebasestorage.app",
+      messagingSenderId: "898372759488",
+      appId: "1:898372759488:web:98f35305049f8f2aa56225",
+      measurementId: "G-5LMLEVTRXE"
+    };
   </script>
   
   <!-- Core App (utilities must load first) -->
