@@ -482,9 +482,11 @@
         const arrHour = (depHour + durationHours + Math.floor((depMin + durationMins) / 60)) % 24;
         const arrMin = (depMin + durationMins) % 60;
         
-        // Price
-        const basePrice = 150 + Math.floor(Math.random() * 800);
-        const totalPrice = basePrice * passengers;
+        // Price in INR (approx ₹8,000 – ₹80,000 for international flights)
+        const basePrice = 8000 + Math.floor(Math.random() * 72000);
+        // Round to nearest ₹500 for realism
+        const roundedBase = Math.round(basePrice / 500) * 500;
+        const totalPrice = roundedBase * passengers;
         
         // Stops
         const stops = Math.random() > 0.5 ? 0 : (Math.random() > 0.5 ? 1 : 2);
@@ -510,7 +512,7 @@
           durationMinutes: durationHours * 60 + durationMins,
           stops: stops,
           stopsText: stopTexts[stops],
-          pricePerPerson: basePrice,
+          pricePerPerson: roundedBase,
           totalPrice: totalPrice,
           passengers: passengers,
           class: 'Economy',
@@ -579,7 +581,9 @@
         
         if (this.currentFlights.length > 0) {
           this.displayFlights(this.currentFlights);
-          this.displayBookingLinks(currentCity, this.destination.name, tripDate);
+          const originCode = depAirports[0]?.code || currentCity;
+          const destCode = arrAirports[0]?.code || this.destination.name;
+          this.displayBookingLinks(currentCity, this.destination.name, tripDate, originCode, destCode);
           this.displayTripSummary(hostCountry, currentCity, tripDate);
         } else {
           if (emptyEl) emptyEl.classList.remove('hidden');
@@ -672,8 +676,8 @@
             </div>
           </div>
           <div class="flight-price-section">
-            <div class="flight-price">$${flight.totalPrice.toLocaleString()}</div>
-            <span class="price-per-person">${flight.passengers > 1 ? `$${flight.pricePerPerson}/person` : 'per person'}</span>
+            <div class="flight-price">₹${flight.totalPrice.toLocaleString('en-IN')}</div>
+            <span class="price-per-person">${flight.passengers > 1 ? `₹${flight.pricePerPerson.toLocaleString('en-IN')}/person` : 'per person'}</span>
             <span class="seats-left ${flight.seatsLeft < 5 ? 'low' : ''}">${flight.seatsLeft} seats left</span>
             <button class="btn btn-primary btn-sm select-flight-btn" data-flight-id="${flight.id}">Select</button>
           </div>
@@ -702,7 +706,7 @@
       const from = flight.departure.airport.code;
       const to = flight.arrival.airport.code;
       const date = flight.departure.date;
-      const googleFlightsUrl = `https://www.google.com/travel/flights?q=flights+from+${from}+to+${to}+on+${date}&curr=USD`;
+      const googleFlightsUrl = `https://www.google.com/travel/flights?q=flights+from+${from}+to+${to}+on+${date}&curr=INR`;
       
       if (typeof showToast === 'function') {
         showToast(`Selected ${flight.airline.name} ${flight.flightNumber}. Check booking links below!`, 'success');
@@ -715,23 +719,70 @@
       }
     },
 
-    displayBookingLinks(origin, destination, date) {
+    displayBookingLinks(origin, destination, date, originCode, destCode) {
       const container = document.getElementById('bookingLinks');
       const card = document.getElementById('bookingLinksCard');
       if (!container || !card) return;
 
       card.classList.remove('hidden');
 
+      // Use IATA codes when available, fall back to city/country names
+      const from = originCode || origin;
+      const to = destCode || destination;
+
+      // Date formats needed by different platforms
+      const dateYYMMDD = date.replace(/-/g, '').slice(2);        // YYMMDD  e.g. 260304
+      const dateYYYYMMDD = date.replace(/-/g, '');               // YYYYMMDD e.g. 20260304
+      const dateMDY = (() => {
+        const [y, m, d] = date.split('-');
+        return `${m}/${d}/${y}`;                                  // MM/DD/YYYY e.g. 03/04/2026
+      })();
+
       const originEnc = encodeURIComponent(origin);
       const destEnc = encodeURIComponent(destination);
 
       const sites = [
-        { name: 'Google Flights', icon: 'fab fa-google', url: `https://www.google.com/travel/flights?q=flights+from+${originEnc}+to+${destEnc}+on+${date}`, color: '#4285f4' },
-        { name: 'Skyscanner', icon: 'fas fa-search-dollar', url: `https://www.skyscanner.com/transport/flights/${originEnc}/${destEnc}/${date.replace(/-/g, '')}`, color: '#0770e3' },
-        { name: 'Kayak', icon: 'fas fa-ship', url: `https://www.kayak.com/flights/${originEnc}-${destEnc}/${date}`, color: '#ff690f' },
-        { name: 'Expedia', icon: 'fas fa-globe', url: `https://www.expedia.com/`, color: '#00355f' },
-        { name: 'Momondo', icon: 'fas fa-search', url: `https://www.momondo.com/flights/${originEnc}-${destEnc}/${date}`, color: '#0896ff' },
-        { name: 'Trip.com', icon: 'fas fa-plane', url: `https://www.trip.com/flights/${originEnc}-${destEnc}`, color: '#287dfa' },
+        {
+          name: 'Google Flights',
+          icon: 'fab fa-google',
+          url: `https://www.google.com/travel/flights?q=flights+from+${originEnc}+to+${destEnc}+on+${date}`,
+          color: '#4285f4'
+        },
+        {
+          name: 'Skyscanner',
+          icon: 'fas fa-search-dollar',
+          // Format: /transport/flights/{FROM_IATA}/{TO_IATA}/{YYMMDD}/
+          url: `https://www.skyscanner.com/transport/flights/${from}/${to}/${dateYYMMDD}/`,
+          color: '#0770e3'
+        },
+        {
+          name: 'Kayak',
+          icon: 'fas fa-ship',
+          // Format: /flights/{FROM}-{TO}/{YYYY-MM-DD}
+          url: `https://www.kayak.com/flights/${from}-${to}/${date}`,
+          color: '#ff690f'
+        },
+        {
+          name: 'Expedia',
+          icon: 'fas fa-globe',
+          // Format: /Flights-Search?trip=oneway&leg1=from:{FROM},to:{TO},departure:{MM/DD/YYYY}TANYT
+          url: `https://www.expedia.com/Flights-Search?trip=oneway&leg1=from:${from},to:${to},departure:${dateMDY}TANYT&passengers=adults:1,children:0,seniors:0,infantinlap:Y&mode=search`,
+          color: '#00355f'
+        },
+        {
+          name: 'Momondo',
+          icon: 'fas fa-search',
+          // Format: /flight-search/{FROM}-{TO}/{YYYY-MM-DD}
+          url: `https://www.momondo.com/flight-search/${from}-${to}/${date}`,
+          color: '#0896ff'
+        },
+        {
+          name: 'Trip.com',
+          icon: 'fas fa-plane',
+          // Format: onewayList?dcity={FROM}&acity={TO}&ddate={YYYYMMDD}
+          url: `https://flights.trip.com/onewayList?dcity=${from}&acity=${to}&ddate=${dateYYYYMMDD}`,
+          color: '#287dfa'
+        },
       ];
 
       container.innerHTML = sites.map(site => `
@@ -827,6 +878,7 @@
         id: Date.now(),
         destination: this.destination.name,
         destinationFlag: this.destination.flag,
+        destinationData: { ...this.destination },
         hostCountry,
         departureCity: currentCity,
         tripDate,
@@ -886,11 +938,24 @@
             <p><i class="fas fa-calendar-alt"></i> ${new Date(trip.tripDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}${trip.returnDate ? ` — ${new Date(trip.returnDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}</p>
             <p><i class="fas fa-map-marker-alt"></i> From ${trip.departureCity} | <i class="fas fa-${trip.travelMode === 'flight' ? 'plane' : trip.travelMode}"></i> ${trip.travelMode}</p>
           </div>
-          <button class="btn-icon delete-trip-btn" data-trip-id="${trip.id}" title="Delete trip">
-            <i class="fas fa-trash"></i>
-          </button>
+          <div class="saved-trip-actions">
+            <button class="btn-icon load-trip-btn" data-trip-id="${trip.id}" title="Load &amp; edit trip">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn-icon delete-trip-btn" data-trip-id="${trip.id}" title="Delete trip">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
         </div>
       `).join('');
+
+      // Bind load/edit buttons
+      list.querySelectorAll('.load-trip-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = parseInt(e.currentTarget.dataset.tripId);
+          this.loadTripForEdit(id);
+        });
+      });
 
       // Bind delete buttons
       list.querySelectorAll('.delete-trip-btn').forEach(btn => {
@@ -899,6 +964,52 @@
           this.deleteTrip(id);
         });
       });
+    },
+
+    loadTripForEdit(id) {
+      const trip = this.trips.find(t => t.id === id);
+      if (!trip) return;
+
+      // Restore destination
+      if (trip.destinationData) {
+        this.destination = trip.destinationData;
+      } else {
+        this.destination = { name: trip.destination, flag: trip.destinationFlag };
+      }
+      localStorage.setItem('globemate_trip_destination', JSON.stringify(this.destination));
+      this.updateDestinationBanner();
+
+      // Populate form fields
+      const hostInput = document.getElementById('tripHostCountry');
+      const cityInput = document.getElementById('tripCurrentLocation');
+      const dateInput = document.getElementById('tripDate');
+      const returnInput = document.getElementById('tripReturnDate');
+      if (hostInput) hostInput.value = trip.hostCountry || '';
+      if (cityInput) cityInput.value = trip.departureCity || '';
+      if (dateInput) dateInput.value = trip.tripDate || '';
+      if (returnInput) returnInput.value = trip.returnDate || '';
+
+      // Restore passenger count
+      this.passengerCount = trip.passengers || 1;
+      const countEl = document.getElementById('passengerCount');
+      if (countEl) countEl.textContent = this.passengerCount;
+
+      // Restore travel mode selection
+      const modeOptions = document.querySelectorAll('.tp-mode');
+      modeOptions.forEach(opt => {
+        opt.classList.remove('selected');
+        const radio = opt.querySelector('input[type="radio"]');
+        if (radio && radio.value === trip.travelMode) {
+          opt.classList.add('selected');
+          radio.checked = true;
+        }
+      });
+
+      // Scroll to the form
+      const form = document.getElementById('tripDetailsForm');
+      if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      if (typeof showToast === 'function') showToast(`Trip to ${trip.destination} loaded for editing!`, 'success');
     },
 
     deleteTrip(id) {

@@ -6555,6 +6555,34 @@ select:focus-visible, textarea:focus-visible {
   color: #ef4444;
 }
 
+.saved-trip-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.load-trip-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s;
+  font-size: 0.82rem;
+}
+
+.load-trip-btn:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #3b82f6;
+}
+
 /* --- Non-Flight Message --- */
 .non-flight-message {
   text-align: center;
