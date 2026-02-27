@@ -66,18 +66,21 @@ const Auth = (() => {
     if (!auth) return { success: false, error: 'Auth service unavailable' };
 
     try {
-      const credential = await auth.createUserWithEmailAndPassword(email, password);
-      await credential.user.updateProfile({ displayName: name });
+      const [credential] = await Promise.all([
+        auth.createUserWithEmailAndPassword(email, password)
+      ]);
+      // Update display name and save Firestore profile in parallel, don't await
+      credential.user.updateProfile({ displayName: name }).catch(console.warn);
       currentUser = credential.user;
 
-      // Save profile to Firestore
+      // Fire-and-forget Firestore write — don't block the user
       const db = getDB();
       if (db) {
-        await db.collection('profiles').doc(credential.user.uid).set({
+        db.collection('profiles').doc(credential.user.uid).set({
           full_name: name,
           email,
           created_at: new Date().toISOString()
-        });
+        }).catch(console.warn);
       }
       return { success: true, user: credential.user };
     } catch (e) {
@@ -108,17 +111,18 @@ const Auth = (() => {
 
     try {
       const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
       const credential = await auth.signInWithPopup(provider);
       currentUser = credential.user;
 
-      // Upsert profile in Firestore
+      // Fire-and-forget Firestore upsert — don't block the user
       const db = getDB();
       if (db) {
-        await db.collection('profiles').doc(credential.user.uid).set({
+        db.collection('profiles').doc(credential.user.uid).set({
           full_name: credential.user.displayName || '',
           email: credential.user.email,
           created_at: new Date().toISOString()
-        }, { merge: true });
+        }, { merge: true }).catch(console.warn);
       }
       return { success: true, user: credential.user };
     } catch (e) {

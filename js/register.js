@@ -13,7 +13,7 @@
         return;
       }
 
-      setTimeout(() => this.setupForm(), 100);
+      this.setupForm();
     },
 
     setupForm() {
@@ -62,7 +62,7 @@
           // Go to countries tab
           setTimeout(() => {
             if (window.PageLoader) window.PageLoader.loadPage('country-info');
-          }, 1000);
+          }, 300);
         } else {
           showToast(result.error || 'Registration failed. Please try again.', 'error');
           btn.disabled = false;
@@ -80,7 +80,7 @@
             Auth.applyLoggedInUI();
             setTimeout(() => {
               if (window.PageLoader) window.PageLoader.loadPage('country-info');
-            }, 1000);
+            }, 300);
           } else {
             showToast(result.error || 'Google sign-up failed.', 'error');
           }
