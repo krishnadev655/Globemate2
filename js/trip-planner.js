@@ -929,12 +929,12 @@
       if (noTrips) noTrips.classList.add('hidden');
 
       list.innerHTML = this.trips.map(trip => `
-        <div class="saved-trip-item">
+        <div class="saved-trip-item" data-trip-id="${trip.id}" role="button" tabindex="0" title="Click to plan this trip with AI">
           <div class="saved-trip-flag">
             ${trip.destinationFlag ? `<img src="${trip.destinationFlag}" alt="${trip.destination}">` : '<i class="fas fa-globe"></i>'}
           </div>
           <div class="saved-trip-info">
-            <h4>${trip.destination}</h4>
+            <h4>${trip.destination} <span class="tap-plan-badge"><i class="fas fa-robot"></i> Plan with AI</span></h4>
             <p><i class="fas fa-calendar-alt"></i> ${new Date(trip.tripDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}${trip.returnDate ? ` — ${new Date(trip.returnDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}</p>
             <p><i class="fas fa-map-marker-alt"></i> From ${trip.departureCity} | <i class="fas fa-${trip.travelMode === 'flight' ? 'plane' : trip.travelMode}"></i> ${trip.travelMode}</p>
           </div>
@@ -952,6 +952,7 @@
       // Bind load/edit buttons
       list.querySelectorAll('.load-trip-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
+          e.stopPropagation(); // prevent item click
           const id = parseInt(e.currentTarget.dataset.tripId);
           this.loadTripForEdit(id);
         });
@@ -960,9 +961,24 @@
       // Bind delete buttons
       list.querySelectorAll('.delete-trip-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
+          e.stopPropagation(); // prevent item click
           const id = parseInt(e.currentTarget.dataset.tripId);
           this.deleteTrip(id);
         });
+      });
+
+      // Bind trip item click → AI planner
+      list.querySelectorAll('.saved-trip-item').forEach(item => {
+        const handler = (e) => {
+          if (e.target.closest('.saved-trip-actions')) return;
+          const id = parseInt(item.dataset.tripId);
+          localStorage.setItem('globemate_ai_trip_id', id);
+          if (typeof PageLoader !== 'undefined') {
+            PageLoader.loadPage('trip-ai-planner');
+          }
+        };
+        item.addEventListener('click', handler);
+        item.addEventListener('keypress', (e) => { if (e.key === 'Enter') handler(e); });
       });
     },
 

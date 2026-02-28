@@ -7240,3 +7240,440 @@ select:focus-visible, textarea:focus-visible {
     padding: 9px 6px !important;
   }
 }
+
+/* ========================================
+   AI TRIP PLANNER  (tap-*)
+   ======================================== */
+
+/* ── Hero Header ── */
+.tap-hero-header {
+  text-align: center;
+  padding: 48px 20px 32px;
+  position: relative;
+}
+.tap-hero-glow {
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 600px; height: 200px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(139,92,246,.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+.tap-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 16px; border-radius: 100px;
+  background: linear-gradient(135deg, rgba(139,92,246,.15), rgba(59,130,246,.15));
+  border: 1px solid rgba(139,92,246,.3);
+  font-size: .8rem; font-weight: 600; color: var(--secondary);
+  margin-bottom: 16px;
+}
+.tap-title {
+  font-size: 2.5rem; font-weight: 800; color: var(--dark);
+  font-family: var(--font-display); margin-bottom: 12px; line-height: 1.2;
+}
+.tap-gradient-text {
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.tap-subtitle {
+  color: var(--gray-500); font-size: 1rem; max-width: 560px; margin: 0 auto;
+}
+
+/* ── Trip Info Bar ── */
+.tap-trip-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0;
+  background: var(--white); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 16px 24px;
+  margin-bottom: 28px; box-shadow: var(--shadow-sm);
+}
+.tap-trip-bar-item {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 140px;
+}
+.tap-trip-bar-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--primary-bg); color: var(--primary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .9rem; flex-shrink: 0;
+}
+.tap-trip-bar-label { display: block; font-size: .7rem; color: var(--gray-500); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; }
+.tap-trip-bar-value { display: block; font-size: .9rem; font-weight: 700; color: var(--dark); }
+.tap-trip-bar-sep { width: 1px; height: 40px; background: var(--gray-200); margin: 0 16px; flex-shrink: 0; }
+
+/* ── Layout ── */
+.tap-layout {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 32px;
+}
+
+/* ── Chat Card ── */
+.tap-chat-card {
+  background: var(--white); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow);
+  display: flex; flex-direction: column;
+  overflow: hidden; position: sticky; top: 80px;
+  max-height: calc(100vh - 140px);
+}
+.tap-chat-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #1e1b4b, #312e81);
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.tap-ai-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 1.1rem; position: relative; flex-shrink: 0;
+}
+.tap-ai-pulse {
+  position: absolute; inset: -4px; border-radius: 50%;
+  border: 2px solid rgba(139,92,246,.5);
+  animation: tapPulse 2s ease-in-out infinite;
+}
+@keyframes tapPulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .4; transform: scale(1.15); }
+}
+.tap-chat-header-info { flex: 1; }
+.tap-chat-header-info h3 { font-size: 1rem; font-weight: 700; color: white; margin-bottom: 2px; }
+.tap-ai-status { font-size: .75rem; color: #86efac; display: flex; align-items: center; gap: 4px; }
+.tap-ai-status i { font-size: .5rem; }
+.tap-reset-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 8px;
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+  color: white; font-size: .8rem; cursor: pointer;
+  transition: var(--transition);
+}
+.tap-reset-btn:hover { background: rgba(255,255,255,.22); }
+
+/* ── Messages ── */
+.tap-messages {
+  flex: 1; overflow-y: auto; padding: 20px 16px;
+  display: flex; flex-direction: column; gap: 14px;
+  min-height: 300px; max-height: 420px;
+}
+.tap-msg {
+  display: flex; gap: 10px; align-items: flex-end;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .3s ease, transform .3s ease;
+}
+.tap-msg.visible { opacity: 1; transform: none; }
+.tap-msg-ai { flex-direction: row; }
+.tap-msg-user { flex-direction: row-reverse; }
+.tap-msg-avatar-ai, .tap-msg-avatar-user {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .8rem;
+}
+.tap-msg-avatar-ai { background: linear-gradient(135deg, var(--secondary), var(--primary)); color: white; }
+.tap-msg-avatar-user { background: var(--gray-200); color: var(--gray-500); }
+.tap-msg-bubble {
+  max-width: 280px; padding: 10px 14px; border-radius: 16px;
+  font-size: .875rem; line-height: 1.55;
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  color: var(--dark); border-bottom-left-radius: 4px;
+}
+.tap-msg-bubble-user {
+  background: linear-gradient(135deg, var(--secondary), var(--primary)) !important;
+  color: white !important; border: none !important;
+  border-bottom-right-radius: 4px !important; border-bottom-left-radius: 16px !important;
+}
+
+/* ── Typing indicator ── */
+.tap-typing-bubble {
+  display: flex; gap: 5px; align-items: center;
+  padding: 12px 16px;
+}
+.tap-typing-dot {
+  width: 7px; height: 7px; background: var(--gray-400); border-radius: 50%;
+  animation: tapTypingDot 1.4s ease infinite;
+}
+.tap-typing-dot:nth-child(2) { animation-delay: .2s; }
+.tap-typing-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes tapTypingDot {
+  0%,60%,100% { transform: translateY(0); }
+  30% { transform: translateY(-6px); }
+}
+
+/* ── Chips ── */
+.tap-chips-wrap { padding: 8px 16px; border-top: 1px solid var(--gray-100); background: var(--gray-50); }
+.tap-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.tap-chip {
+  padding: 6px 14px; border-radius: 100px;
+  border: 1.5px solid var(--gray-300); background: var(--white);
+  color: var(--dark); font-size: .82rem; font-weight: 500;
+  cursor: pointer; transition: var(--transition);
+}
+.tap-chip:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-bg); }
+.tap-chip.selected { border-color: var(--secondary); color: var(--secondary); background: rgba(139,92,246,.08); }
+.tap-chip-confirm {
+  border-color: var(--secondary) !important; color: white !important;
+  background: linear-gradient(135deg, var(--secondary), var(--primary)) !important;
+}
+
+/* ── Input bar ── */
+.tap-input-bar { padding: 12px 16px; border-top: 1px solid var(--gray-200); background: var(--white); display: flex; }
+.tap-input-wrap { display: flex; gap: 8px; width: 100%; }
+.tap-input {
+  flex: 1; padding: 10px 14px; border-radius: 10px;
+  border: 1.5px solid var(--gray-300); font-size: .88rem;
+  color: var(--dark); background: var(--gray-50);
+  transition: var(--transition); outline: none;
+}
+.tap-input:focus { border-color: var(--primary); background: var(--white); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+.tap-send-btn {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  border: none; color: white; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition);
+}
+.tap-send-btn:hover { transform: scale(1.05); }
+
+/* ── Progress Card ── */
+.tap-progress-card {
+  background: var(--white); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); padding: 20px;
+  margin-bottom: 24px; box-shadow: var(--shadow-sm);
+}
+.tap-progress-header {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; color: var(--dark); margin-bottom: 16px; font-size: .95rem;
+}
+.tap-progress-header i { color: var(--primary); }
+.tap-prog-step {
+  display: grid; grid-template-columns: 14px 1fr auto;
+  align-items: center; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+.tap-prog-step:last-child { border-bottom: none; }
+.tap-prog-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--gray-300); transition: var(--transition);
+}
+.tap-prog-dot.done { background: var(--success); box-shadow: 0 0 6px rgba(16,185,129,.4); }
+.tap-prog-label { font-size: .85rem; color: var(--gray-500); }
+.tap-prog-val { font-size: .82rem; font-weight: 600; color: var(--dark); text-align: right; }
+
+/* ── Itinerary Card ── */
+.tap-itinerary-card {
+  background: var(--white); border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow);
+}
+.tap-itinerary-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 20px 24px; border-bottom: 1px solid var(--gray-200);
+  background: linear-gradient(135deg, #f8fafc, #eff6ff);
+}
+.tap-itinerary-icon {
+  width: 48px; height: 48px; border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 1.3rem; flex-shrink: 0;
+}
+.tap-itinerary-header h3 { font-size: 1.1rem; font-weight: 700; color: var(--dark); margin-bottom: 2px; }
+.tap-itinerary-header p { font-size: .8rem; color: var(--gray-500); }
+.tap-itinerary-actions { margin-left: auto; display: flex; gap: 8px; }
+.tap-action-btn {
+  width: 36px; height: 36px; border-radius: 8px;
+  border: 1.5px solid var(--gray-300); background: var(--white);
+  color: var(--gray-500); cursor: pointer; transition: var(--transition);
+  display: flex; align-items: center; justify-content: center;
+}
+.tap-action-btn:hover { border-color: var(--primary); color: var(--primary); }
+.tap-itinerary-body { padding: 24px; }
+
+/* ── Overview Banner ── */
+.tap-overview-banner {
+  background: linear-gradient(135deg, #0f172a, #1e1b4b);
+  border-radius: var(--radius-lg); padding: 20px 24px; margin-bottom: 20px;
+  color: white;
+}
+.tap-overview-row { display: flex; flex-wrap: wrap; gap: 16px; }
+.tap-ov-item {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 120px;
+}
+.tap-ov-item i { font-size: 1.2rem; color: rgba(139,92,246,.8); }
+.tap-ov-item small { display: block; font-size: .7rem; color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .05em; }
+.tap-ov-item strong { display: block; font-size: .9rem; font-weight: 700; }
+
+/* ── Tips Row ── */
+.tap-tips-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.tap-tip-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 100px;
+  background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.2);
+  color: var(--primary); font-size: .78rem; font-weight: 500;
+}
+
+/* ── Section Labels ── */
+.tap-section-label {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; color: var(--dark); font-size: .95rem;
+  margin: 24px 0 14px;
+  padding-bottom: 10px; border-bottom: 2px solid var(--gray-100);
+}
+.tap-section-label i { color: var(--secondary); }
+
+/* ── Budget Grid ── */
+.tap-budget-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.tap-budget-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--radius);
+  border: 1px solid var(--gray-200); background: var(--gray-50);
+}
+.tap-budget-icon {
+  width: 36px; height: 36px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .9rem; flex-shrink: 0;
+}
+.tap-budget-cat { display: block; font-size: .75rem; color: var(--gray-500); }
+.tap-budget-amt { display: block; font-size: .95rem; font-weight: 700; color: var(--dark); }
+.tap-budget-total {
+  grid-column: 1 / -1;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  color: white; font-size: .95rem; font-weight: 600;
+}
+.tap-budget-total strong { font-size: 1.2rem; }
+
+/* ── Day Cards ── */
+.tap-days-list { display: flex; flex-direction: column; gap: 16px; }
+.tap-day-card {
+  border: 1px solid var(--gray-200); border-radius: var(--radius-lg);
+  overflow: hidden; box-shadow: var(--shadow-sm);
+}
+.tap-day-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #f8fafc, #eff6ff);
+  border-bottom: 1px solid var(--gray-200);
+}
+.tap-day-num {
+  padding: 4px 12px; border-radius: 100px;
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  color: white; font-size: .78rem; font-weight: 700; flex-shrink: 0;
+}
+.tap-day-title { font-weight: 700; color: var(--dark); flex: 1; }
+.tap-day-date { font-size: .8rem; color: var(--gray-500); }
+.tap-day-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.tap-slot { display: flex; gap: 12px; }
+.tap-slot-tag {
+  display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+  padding: 4px 10px; border-radius: 6px; font-size: .75rem;
+  font-weight: 600; width: 100px;
+}
+.tap-slot-morning { background: rgba(245,158,11,.12); color: #b45309; }
+.tap-slot-afternoon { background: rgba(59,130,246,.1); color: var(--primary-dark); }
+.tap-slot-evening { background: rgba(139,92,246,.1); color: var(--secondary); }
+.tap-slot-content p { margin-bottom: 3px; font-size: .875rem; color: var(--dark); }
+.tap-slot-tip { color: var(--primary) !important; font-size: .8rem !important; }
+.tap-day-stay {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; background: rgba(59,130,246,.05);
+  border-top: 1px solid var(--gray-100); font-size: .82rem;
+  color: var(--gray-500);
+}
+.tap-day-stay i { color: var(--primary); }
+.tap-day-stay strong { color: var(--dark); }
+.tap-day-stay-price { margin-left: auto; color: var(--success); font-weight: 600; }
+
+/* ── Food Grid ── */
+.tap-food-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.tap-food-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-radius: var(--radius);
+  background: rgba(245,158,11,.07); border: 1px solid rgba(245,158,11,.2);
+  font-size: .82rem; color: var(--dark); font-weight: 500;
+}
+.tap-food-icon { color: #f59e0b; font-size: .85rem; flex-shrink: 0; }
+
+/* ── Highlights ── */
+.tap-highlights-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.tap-highlight-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 100px;
+  background: rgba(139,92,246,.06); border: 1px solid rgba(139,92,246,.2);
+  font-size: .82rem; color: var(--dark); font-weight: 500;
+}
+.tap-hl-num {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--secondary); color: white;
+  font-size: .65rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Packing Grid ── */
+.tap-packing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.tap-pack-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px;
+  background: rgba(16,185,129,.05); border: 1px solid rgba(16,185,129,.2);
+  font-size: .83rem; color: var(--dark);
+}
+.tap-pack-item i { color: var(--success); font-size: .8rem; }
+
+/* ── Tips List ── */
+.tap-tips-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.tap-tips-list li {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 14px; border-radius: 8px;
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  font-size: .875rem; color: var(--dark);
+}
+.tap-tips-list li i { color: var(--warning); margin-top: 2px; flex-shrink: 0; }
+
+/* ── Back Row ── */
+.tap-back-row { margin-bottom: 32px; text-align: center; }
+.tap-back-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 22px; border-radius: var(--radius);
+  background: var(--white); border: 1.5px solid var(--gray-300);
+  color: var(--gray-500); font-size: .88rem; font-weight: 600;
+  cursor: pointer; transition: var(--transition);
+}
+.tap-back-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── Saved Trip Item — clickable ── */
+.saved-trip-item {
+  cursor: pointer;
+}
+.saved-trip-item:hover {
+  background: var(--primary-bg) !important;
+  border-color: var(--primary) !important;
+}
+.saved-trip-item .saved-trip-info h4 {
+  display: flex; align-items: center; gap: 6px;
+}
+.tap-plan-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 100px;
+  background: linear-gradient(135deg, rgba(139,92,246,.15), rgba(59,130,246,.15));
+  border: 1px solid rgba(139,92,246,.3);
+  font-size: .7rem; font-weight: 600; color: var(--secondary);
+  margin-left: 6px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .tap-layout { grid-template-columns: 1fr; }
+  .tap-chat-card { position: static; max-height: 520px; }
+  .tap-title { font-size: 1.8rem; }
+}
+@media (max-width: 600px) {
+  .tap-trip-bar { gap: 12px; }
+  .tap-trip-bar-sep { display: none; }
+  .tap-trip-bar-item { min-width: 120px; }
+  .tap-overview-row { gap: 10px; }
+  .tap-ov-item { min-width: 100px; }
+  .tap-budget-grid { grid-template-columns: 1fr 1fr; }
+  .tap-day-header { flex-wrap: wrap; }
+  .tap-slot { flex-direction: column; gap: 6px; }
+  .tap-slot-tag { width: auto; }
+}

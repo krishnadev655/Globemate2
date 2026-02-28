@@ -1,0 +1,183 @@
+<!-- ============ AI TRIP PLANNER ============ -->
+<section class="section section-alt tab-section" id="trip-ai-planner">
+  <div class="container">
+
+    <!-- Hero Header -->
+    <div class="tap-hero-header">
+      <div class="tap-hero-glow"></div>
+      <span class="tap-badge"><i class="fas fa-robot"></i> AI Travel Planner</span>
+      <h2 class="tap-title">Your <span class="tap-gradient-text">Smart Itinerary</span></h2>
+      <p class="tap-subtitle">Chat with our AI travel assistant to build a personalised day-by-day travel plan tailored to your budget, interests and style.</p>
+    </div>
+
+    <!-- Trip Info Bar -->
+    <div class="tap-trip-bar" id="tapTripBar">
+      <div class="tap-trip-bar-item" id="tapBarDestination">
+        <span class="tap-trip-bar-icon"><i class="fas fa-map-marker-alt"></i></span>
+        <div>
+          <span class="tap-trip-bar-label">Destination</span>
+          <span class="tap-trip-bar-value" id="tapDestName">—</span>
+        </div>
+      </div>
+      <div class="tap-trip-bar-sep"></div>
+      <div class="tap-trip-bar-item">
+        <span class="tap-trip-bar-icon"><i class="fas fa-calendar-alt"></i></span>
+        <div>
+          <span class="tap-trip-bar-label">Travel Date</span>
+          <span class="tap-trip-bar-value" id="tapTravelDate">—</span>
+        </div>
+      </div>
+      <div class="tap-trip-bar-sep"></div>
+      <div class="tap-trip-bar-item">
+        <span class="tap-trip-bar-icon"><i class="fas fa-map-pin"></i></span>
+        <div>
+          <span class="tap-trip-bar-label">Departing From</span>
+          <span class="tap-trip-bar-value" id="tapDepartCity">—</span>
+        </div>
+      </div>
+      <div class="tap-trip-bar-sep"></div>
+      <div class="tap-trip-bar-item">
+        <span class="tap-trip-bar-icon"><i class="fas fa-plane"></i></span>
+        <div>
+          <span class="tap-trip-bar-label">Travel Mode</span>
+          <span class="tap-trip-bar-value" id="tapTravelMode">—</span>
+        </div>
+      </div>
+      <div class="tap-trip-bar-sep"></div>
+      <div class="tap-trip-bar-item">
+        <span class="tap-trip-bar-icon"><i class="fas fa-users"></i></span>
+        <div>
+          <span class="tap-trip-bar-label">Passengers</span>
+          <span class="tap-trip-bar-value" id="tapPassengers">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="tap-layout">
+
+      <!-- ── Chatbot Column ── -->
+      <div class="tap-chat-col">
+        <div class="tap-chat-card">
+          <div class="tap-chat-header">
+            <div class="tap-ai-avatar">
+              <i class="fas fa-robot"></i>
+              <span class="tap-ai-pulse"></span>
+            </div>
+            <div class="tap-chat-header-info">
+              <h3>GlobeMate AI</h3>
+              <span class="tap-ai-status"><i class="fas fa-circle"></i> Online</span>
+            </div>
+            <button class="tap-reset-btn" id="tapResetBtn" title="Start over">
+              <i class="fas fa-redo"></i>
+              <span>Restart</span>
+            </button>
+          </div>
+
+          <!-- Messages Window -->
+          <div class="tap-messages" id="tapMessages">
+            <!-- Messages inserted by JS -->
+          </div>
+
+          <!-- Quick Reply Chips -->
+          <div class="tap-chips-wrap" id="tapChipsWrap">
+            <div class="tap-chips" id="tapChips"></div>
+          </div>
+
+          <!-- Text Input -->
+          <div class="tap-input-bar" id="tapInputBar">
+            <div class="tap-input-wrap">
+              <input 
+                type="text" 
+                id="tapUserInput" 
+                class="tap-input"
+                placeholder="Type your answer…"
+                autocomplete="off"
+              >
+              <button class="tap-send-btn" id="tapSendBtn">
+                <i class="fas fa-paper-plane"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Itinerary Column ── -->
+      <div class="tap-itinerary-col">
+
+        <!-- Progress Card -->
+        <div class="tap-progress-card" id="tapProgressCard">
+          <div class="tap-progress-header">
+            <i class="fas fa-tasks"></i>
+            <span>Planning Progress</span>
+          </div>
+          <div class="tap-progress-steps" id="tapProgressSteps">
+            <div class="tap-prog-step" data-step="purpose">
+              <span class="tap-prog-dot"></span>
+              <span class="tap-prog-label">Purpose of Travel</span>
+              <span class="tap-prog-val" id="prog-purpose">—</span>
+            </div>
+            <div class="tap-prog-step" data-step="duration">
+              <span class="tap-prog-dot"></span>
+              <span class="tap-prog-label">Trip Duration</span>
+              <span class="tap-prog-val" id="prog-duration">—</span>
+            </div>
+            <div class="tap-prog-step" data-step="budget">
+              <span class="tap-prog-dot"></span>
+              <span class="tap-prog-label">Total Budget</span>
+              <span class="tap-prog-val" id="prog-budget">—</span>
+            </div>
+            <div class="tap-prog-step" data-step="accommodation">
+              <span class="tap-prog-dot"></span>
+              <span class="tap-prog-label">Accommodation</span>
+              <span class="tap-prog-val" id="prog-accommodation">—</span>
+            </div>
+            <div class="tap-prog-step" data-step="interests">
+              <span class="tap-prog-dot"></span>
+              <span class="tap-prog-label">Interests</span>
+              <span class="tap-prog-val" id="prog-interests">—</span>
+            </div>
+            <div class="tap-prog-step" data-step="dietary">
+              <span class="tap-prog-dot"></span>
+              <span class="tap-prog-label">Dietary / Special</span>
+              <span class="tap-prog-val" id="prog-dietary">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Itinerary Output -->
+        <div class="tap-itinerary-card hidden" id="tapItineraryCard">
+          <div class="tap-itinerary-header">
+            <div class="tap-itinerary-icon">
+              <i class="fas fa-map-signs"></i>
+            </div>
+            <div>
+              <h3 id="tapItineraryTitle">Your Travel Itinerary</h3>
+              <p id="tapItinerarySubtitle">Personalised by GlobeMate AI</p>
+            </div>
+            <div class="tap-itinerary-actions">
+              <button class="tap-action-btn" id="tapPrintBtn" title="Print / Save PDF">
+                <i class="fas fa-print"></i>
+              </button>
+              <button class="tap-action-btn" id="tapShareItineraryBtn" title="Share">
+                <i class="fas fa-share-alt"></i>
+              </button>
+            </div>
+          </div>
+          <div class="tap-itinerary-body" id="tapItineraryBody">
+            <!-- Generated by JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Back Button -->
+    <div class="tap-back-row">
+      <button class="tap-back-btn" data-tab="trip-planner">
+        <i class="fas fa-arrow-left"></i> Back to Trip Planner
+      </button>
+    </div>
+
+  </div>
+</section>
