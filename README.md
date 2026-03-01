@@ -10,14 +10,21 @@ A modern, feature-rich travel planning web application built with vanilla JavaSc
 
 - [Overview](#overview)
 - [Features](#features)
+- [Architecture](#architecture)
+- [Data Flow Block Diagram](#data-flow-block-diagram)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Setup Instructions](#setup-instructions)
 - [Authentication System](#authentication-system)
 - [Page Modules](#page-modules)
+- [APIs & Integrations — Complete Reference](#apis--integrations--complete-reference)
+- [API Data Flow — How Each API Is Fetched & Used](#api-data-flow--how-each-api-is-fetched--used)
+- [External Domains Contacted](#external-domains-contacted)
 - [Styling & Design](#styling--design)
-- [APIs & Integrations](#apis--integrations)
+- [Common Patterns](#common-patterns)
+- [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
+- [Future Enhancements](#future-enhancements)
 - [License](#license)
 
 ---
@@ -25,11 +32,11 @@ A modern, feature-rich travel planning web application built with vanilla JavaSc
 ## 🎯 Overview
 
 **GlobeMate** is a comprehensive travel assistant that helps travelers:
-- **Plan** multi-destination trips with itineraries
+- **Plan** multi-destination trips with itineraries (manual + AI-generated)
 - **Research** country-specific information (visa requirements, culture, currency)
 - **Track** real-time currency exchange rates
 - **Manage** packing lists and travel documents
-- **Explore** interactive maps with location markers
+- **Explore** interactive maps with location markers and geocoding
 - **Stay safe** with health advisories and emergency contacts
 
 The app uses a **Single Page Application (SPA)** architecture with dynamic page loading, smooth transitions, and persistent user sessions via Firebase Authentication.
@@ -38,88 +45,404 @@ The app uses a **Single Page Application (SPA)** architecture with dynamic page 
 
 ## ✨ Features
 
-### 🏠 **Home Page**
+### 🏠 Home Page
 - Hero section with animated gradient text
 - Statistics showcase (195+ countries, 160+ currencies, 7 tools)
 - Quick access buttons to Register and Log In
 
-### 🔐 **Authentication**
+### 🔐 Authentication
 - **Register**: Create new accounts with email/password or Google OAuth
 - **Login**: Secure login with session persistence
 - **User Profile**: Navbar displays logged-in user's name, hides Home tab
 - **Logout**: Clean session management, restores default UI
 - **Firebase Integration**: Backend authentication with Cloud Firestore profiles collection
 
-### 🗺️ **Trip Planner**
+### 🗺️ Trip Planner
 - Create multi-destination itineraries
 - Add activities, notes, and dates for each location
 - Visual timeline of your trip
 - Save and manage multiple trips
+- Country search with REST Countries API autocomplete
+- Geolocation-based city detection via Nominatim
 
-### 🏳️ **Country Information**
+### 🤖 AI Trip Planner
+- Fully self-contained itinerary generator (JS-only styles)
+- Generates day-by-day itineraries with budgets in INR/USD
+- Printable trip plans with dedicated print view
+- No external AI API — all data is computed locally
+
+### 🏳️ Country Information
 - Search 195+ countries with autocomplete suggestions
-- View comprehensive country details:
-  - Capital, population, region
-  - Languages, currencies
-  - Flag and coat of arms
-  - Time zones and calling codes
-  - Driving side
-- **NEW: Historical Overview** - Wikipedia API integration for country history and culture
-- **NEW: Important Places to Visit** - Curated tourist attractions with images for 16 popular countries
-  - Beautiful place cards with high-quality images
-  - Detailed descriptions and categorization (Landmark, Museum, Nature, etc.)
-  - Covers France, Japan, Italy, Spain, UK, USA, China, Egypt, India, Australia, Brazil, Germany, Canada, Mexico, Greece, Thailand
-- Visa eligibility checker - Compare passport requirements between countries
-- Travel advisories and entry requirements
+- View comprehensive country details (capital, population, region, languages, currencies, flag, time zones, calling codes, driving side)
+- **Historical Overview** — Wikipedia API integration for country history and culture
+- **Important Places to Visit** — Curated tourist attractions with Unsplash images for 16+ countries
+- Visa eligibility checker — Compare passport requirements between countries
 
-### 🛡️ **Safety Hub**
+### 🛡️ Safety Hub
 - Health and vaccination requirements
 - Emergency contact numbers (police, ambulance, embassy)
 - Travel advisories and warnings
-- Local laws and customs
+- Local laws and customs (hardcoded data — no external API)
 
-### 🎒 **Packing List**
+### 🎒 Packing List
 - Smart packing suggestions by category
-- Customizable checklists
-- Weather-based recommendations
-- Save and share lists
+- Customizable checklists with add/remove
+- Check/uncheck functionality
+- Save to local storage
 
-### 💱 **Currency Converter**
-- Real-time exchange rates for 160+ currencies
-- Live conversion calculator
-- Historical rate charts
-- Popular currency pairs
+### 💱 Currency Converter
+- Real-time exchange rates for 160+ currencies via Exchange Rate API
+- Live conversion calculator with amount validation
+- Swap from/to currencies
+- Hardcoded fallback rates if API fails
 
-### 📄 **Documents Manager**
+### 📄 Documents Manager
 - Upload and organize travel documents
-- Passport, visa, insurance, tickets
-- Secure cloud storage
-- Quick access during travel
+- Document type categorization (passport, visa, insurance, tickets)
+- List view with delete options
+- Local storage persistence
 
-### 🗺️ **Interactive Maps**
-- Leaflet.js integration
-- Search and pin locations
-- Route planning
-- Points of interest
+### 🗺️ Interactive Maps
+- Leaflet.js with OpenStreetMap tiles
+- Forward geocoding search via Nominatim API
+- Reverse geocoding on map click
+- Marker placement with address details
+
+---
+
+## 🏗️ Architecture
+
+### SPA Modular Architecture
+
+GlobeMate is built as a **Single Page Application (SPA)** using a modular vanilla JavaScript architecture. All navbar sections have separate HTML and JavaScript files. User authentication is handled by **Firebase Authentication** (compat v9 SDK) and user profile data is stored in **Cloud Firestore**.
+
+### How It Works
+
+#### 1. Page Loading System (`page-loader.js`)
+- Dynamically loads HTML from `pages/` folder via `fetch()`
+- Manages page transitions with fade effects
+- Calls module `init()` when page loads
+- Calls module `cleanup()` when leaving page
+- Handles navigation via `data-tab` attributes on nav links
+
+#### 2. Module Pattern
+Every JavaScript module follows this IIFE pattern:
+
+```javascript
+(function() {
+  'use strict';
+  
+  const ModuleName = {
+    init() {
+      // Initialize module when page loads
+      this.bindEvents();
+      this.loadData();
+    },
+
+    bindEvents() {
+      // Attach event listeners
+    },
+
+    loadData() {
+      // Load data from localStorage or APIs
+    },
+
+    cleanup() {
+      // Clean up before leaving page
+    }
+  };
+
+  // Expose to global scope
+  window.ModuleName = ModuleName;
+
+  // Register with PageLoader
+  if (typeof PageLoader !== 'undefined') {
+    PageLoader.registerModule('page-id', ModuleName);
+  }
+})();
+```
+
+#### 3. Navigation Flow
+```
+User clicks nav link (data-tab="page-id")
+       │
+       ▾
+PageLoader intercepts click
+       │
+       ▾
+Calls cleanup() on current module
+       │
+       ▾
+Fetches pages/page-id.html via fetch()
+       │
+       ▾
+Injects HTML into #content-container
+       │
+       ▾
+Calls init() on new module
+       │
+       ▾
+Updates active nav link styling + scrolls to top
+```
+
+### Firebase Auth Object (`js/auth.js`)
+
+`auth.js` exports a single IIFE-based `Auth` module attached to `window.Auth`. It is the **only** file that talks to Firebase directly. All other modules call `Auth.*` methods.
+
+| Method | Firebase API Used | Notes |
+|---|---|---|
+| `initFirebase()` | `firebase.initializeApp()` | Called once on script load; no-op if already init |
+| `checkSession()` | `onAuthStateChanged` | Wrapped in Promise; unsubscribes after first event |
+| `signUp(name, email, password)` | `createUserWithEmailAndPassword` + `updateProfile` | Firestore profile write is fire-and-forget |
+| `login(email, password)` | `signInWithEmailAndPassword` | Synchronous credential check |
+| `signInWithGoogle()` | `signInWithPopup(GoogleAuthProvider)` | Firestore upsert is fire-and-forget |
+| `logout()` | `auth.signOut()` | Clears IndexedDB session, restores UI |
+| `applyLoggedInUI()` | — | DOM-only; no Firebase call |
+| `restoreLoggedOutUI()` | — | DOM-only; no Firebase call |
+
+### Firestore Data Model
+```
+Firestore
+└── profiles/          (collection)
+    └── {uid}            (document — keyed by Firebase Auth UID)
+        ├── full_name: string
+        ├── email: string
+        └── created_at: ISO 8601 string
+```
+
+### Benefits of Modular Architecture
+- **Easier Debugging** — Each section's code is isolated; issues in one module don't affect others
+- **Better Maintainability** — Find and edit features quickly, add/remove sections by adding/deleting files
+- **Improved Performance** — Only necessary JS runs; proper cleanup prevents memory leaks; lazy init for maps
+- **Team Collaboration** — Multiple devs can work on different modules with reduced merge conflicts
+
+---
+
+## 📊 Data Flow Block Diagram
+
+### Application-Wide Data Flow
+
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                          USER (Browser)                                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
+│  │  Click /  │  │  Type /  │  │  Map     │  │  Form    │  │  Page    │       │
+│  │  Navigate │  │  Search  │  │  Click   │  │  Submit  │  │  Load    │       │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘       │
+└───────┼──────────────┼──────────────┼──────────────┼──────────────┼───────────┘
+        │              │              │              │              │
+        ▾              ▾              ▾              ▾              ▾
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                        page-loader.js (SPA Router)                            │
+│                                                                               │
+│   fetch('pages/{id}.html')  →  inject into #content-container                 │
+│   call cleanup() on old module  →  call init() on new module                  │
+└──────────────────────────────────┬────────────────────────────────────────────┘
+                                   │
+              ┌────────────────────┼────────────────────┐
+              ▾                    ▾                     ▾
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐
+│  auth.js         │  │  Module JS       │  │  app.js              │
+│  (Firebase only) │  │  (Feature logic) │  │  (Utilities)         │
+│                  │  │                  │  │                      │
+│ ┌──────────────┐ │  │  country-info.js │  │  showToast()         │
+│ │ Firebase SDK │ │  │  currency.js     │  │  fetchAPI() wrapper  │
+│ │ Auth + Fstor │ │  │  maps.js         │  │  splash screen       │
+│ └──────┬───────┘ │  │  trip-planner.js │  │  animations          │
+└────────┼─────────┘  │  packing.js      │  └──────────────────────┘
+         │            │  safety.js       │
+         ▾            │  documents.js    │
+┌──────────────────┐  │  trip-ai-plan.js │
+│ Firebase Cloud   │  └────────┬─────────┘
+│                  │           │
+│ ┌──────────────┐ │           ▾
+│ │  Auth        │ │  ┌──────────────────────────────────────────┐
+│ │ (IndexedDB)  │ │  │         EXTERNAL APIs (fetch)            │
+│ ├──────────────┤ │  │                                          │
+│ │  Firestore   │ │  │  ┌────────────────────────────────────┐  │
+│ │  profiles/   │ │  │  │ restcountries.com/v3.1/all         │  │
+│ │  {uid}       │ │  │  │ → country-info.js, trip-planner.js │  │
+│ └──────────────┘ │  │  ├────────────────────────────────────┤  │
+└──────────────────┘  │  │ en.wikipedia.org/api/rest_v1/      │  │
+                      │  │ → country-info.js (history/places) │  │
+                      │  ├────────────────────────────────────┤  │
+                      │  │ api.exchangerate-api.com/v4/       │  │
+                      │  │ → currency.js                      │  │
+                      │  ├────────────────────────────────────┤  │
+                      │  │ nominatim.openstreetmap.org         │  │
+                      │  │ → maps.js, trip-planner.js         │  │
+                      │  ├────────────────────────────────────┤  │
+                      │  │ {s}.tile.openstreetmap.org          │  │
+                      │  │ → maps.js (Leaflet tile layer)     │  │
+                      │  └────────────────────────────────────┘  │
+                      └──────────────────────────────────────────┘
+                                       │
+                                       ▾
+                      ┌──────────────────────────────────────────┐
+                      │           LOCAL STORAGE                   │
+                      │                                          │
+                      │  Trip data, packing lists, documents,    │
+                      │  currency cache, module state            │
+                      └──────────────────────────────────────────┘
+```
+
+### Authentication Data Flow
+
+```
+┌────────────┐     ┌──────────────┐     ┌──────────────────────────┐
+│   User     │     │  register.js │     │       auth.js            │
+│  (Browser) │     │  / login.js  │     │  (Firebase Gateway)      │
+└─────┬──────┘     └──────┬───────┘     └────────────┬─────────────┘
+      │                   │                          │
+      │  Submit form      │                          │
+      ├──────────────────►│                          │
+      │                   │  Auth.signUp/login()     │
+      │                   ├─────────────────────────►│
+      │                   │                          │  createUser / signIn
+      │                   │                          ├────────────────────────►  Firebase Auth
+      │                   │                          │◄───────────────────────  (credential)
+      │                   │                          │
+      │                   │                          │  [fire-and-forget]
+      │                   │                          │  Firestore profiles/{uid}.set()
+      │                   │                          ├────────────────────────►  Cloud Firestore
+      │                   │                          │
+      │                   │                          │  applyLoggedInUI()
+      │                   │                          │  (update navbar DOM)
+      │                   │◄─────────────────────────┤
+      │  Toast + redirect │                          │
+      │◄──────────────────┤                          │
+      │                   │                          │
+```
+
+### Country Explorer Data Flow
+
+```
+User types "Japan"
+       │
+       ▾
+┌─────────────────────────────────────────────────────┐
+│  country-info.js                                     │
+│                                                      │
+│  handleSearch("jap")                                 │
+│       │                                              │
+│       ▾                                              │
+│  Filter cached countries[] ◄── loaded once from      │
+│  (in-memory array)             restcountries.com     │
+│       │                                              │
+│       ▾                                              │
+│  showSuggestions() ──► User clicks "Japan"           │
+│       │                                              │
+│       ▾                                              │
+│  selectCountry("JPN")                                │
+│       │                                              │
+│       ├──► displayCountryInfo()     [cached data]    │
+│       │    → capital, population,                    │
+│       │      languages, flag, etc.                   │
+│       │                                              │
+│       ├──► loadCountryHistory()     [Wikipedia API]  │
+│       │    → GET /page/summary/Japan                 │
+│       │    → render data.extract                     │
+│       │    → link to full article                    │
+│       │                                              │
+│       ├──► loadImportantPlaces()    [local DB]       │
+│       │    → 4 curated places with                   │
+│       │      Unsplash images                         │
+│       │    → fallback: Wikipedia                     │
+│       │      Tourism in {country}                    │
+│       │                                              │
+│       └──► Visa checker ready for                    │
+│            user interaction                          │
+└─────────────────────────────────────────────────────┘
+```
+
+### Currency Conversion Data Flow
+
+```
+┌──────────┐       ┌────────────────┐       ┌─────────────────────────┐
+│  User    │       │  currency.js   │       │  exchangerate-api.com   │
+└────┬─────┘       └───────┬────────┘       └────────────┬────────────┘
+     │                     │                             │
+     │  Page loads         │                             │
+     │────────────────────►│  fetchRates()               │
+     │                     ├────────────────────────────►│
+     │                     │    GET /v4/latest/USD        │
+     │                     │◄────────────────────────────┤
+     │                     │    { rates: { EUR: 0.92,    │
+     │                     │      GBP: 0.79, ... } }     │
+     │                     │                             │
+     │                     │  Cache rates in memory      │
+     │                     │  (fallback: hardcoded)      │
+     │                     │                             │
+     │  Enter amount,      │                             │
+     │  pick currencies    │                             │
+     │────────────────────►│                             │
+     │                     │  convert()                  │
+     │                     │  amount × (to / from)       │
+     │  Display result     │                             │
+     │◄────────────────────┤                             │
+```
+
+### Maps & Geocoding Data Flow
+
+```
+┌──────────┐       ┌────────────────┐       ┌──────────────────────────┐
+│  User    │       │    maps.js     │       │  nominatim.              │
+│          │       │  (Leaflet.js)  │       │  openstreetmap.org       │
+└────┬─────┘       └───────┬────────┘       └────────────┬─────────────┘
+     │                     │                             │
+     │  Search "Paris"     │                             │
+     │────────────────────►│  Forward Geocode            │
+     │                     ├────────────────────────────►│
+     │                     │  GET /search?q=Paris        │
+     │                     │◄────────────────────────────┤
+     │                     │  [{lat,lon,display_name}]   │
+     │  Map flies to Paris │                             │
+     │  + marker added     │                             │
+     │◄────────────────────┤                             │
+     │                     │                             │
+     │  Click on map       │                             │
+     │────────────────────►│  Reverse Geocode            │
+     │                     ├────────────────────────────►│
+     │                     │  GET /reverse?lat=&lon=     │
+     │                     │◄────────────────────────────┤
+     │                     │  {address: {city, country}} │
+     │  Popup shows        │                             │
+     │  address info       │                             │
+     │◄────────────────────┤                             │
+     │                     │                             │
+     │           ┌─────────┴──────────┐                  │
+     │           │ tile.openstreetmap │                   │
+     │           │ .org/{z}/{x}/{y}   │                   │
+     │           │ (map tile images)  │                   │
+     │           └────────────────────┘                  │
+```
 
 ---
 
 ## 🛠️ Tech Stack
 
-### **Frontend**
-- **HTML5**: Semantic markup
-- **CSS3**: Custom properties, Flexbox, Grid, animations
-- **JavaScript (ES6+)**: Modular architecture, async/await
-- **Font Awesome 6**: Icon library
-- **Google Fonts**: Inter, Playfair Display
+### Frontend
+| Technology | Purpose |
+|---|---|
+| **HTML5** | Semantic markup |
+| **CSS3** | Custom properties, Flexbox, Grid, animations |
+| **JavaScript (ES6+)** | Modular IIFE architecture, async/await |
+| **Font Awesome 6.5.1** | Icon library (via cdnjs CDN) |
+| **Google Fonts** | Inter, Playfair Display, Pacifico, Great Vibes, Dancing Script, Poppins |
 
-### **Backend & Services**
-- **Firebase Authentication**: Email/password and Google OAuth sign-in
-- **Cloud Firestore**: NoSQL database for user profiles
-- **REST APIs**: Country data, currency exchange rates
-- **Leaflet.js**: Interactive maps
+### Backend & Services
+| Service | Purpose |
+|---|---|
+| **Firebase Auth (v9 compat)** | Email/password and Google OAuth sign-in |
+| **Cloud Firestore** | NoSQL database for user profiles |
+| **REST Countries API** | Country data (195+ countries) |
+| **Exchange Rate API** | Live currency exchange rates |
+| **Wikipedia REST API** | Country history & tourism info |
+| **Nominatim (OSM)** | Forward & reverse geocoding |
+| **Leaflet.js 1.9.4** | Interactive maps with OSM tiles |
+| **Unsplash CDN** | Tourist destination images |
 
-### **Build & Deployment**
+### Build & Deployment
 - No build process required (vanilla JS)
 - Static site hosting compatible
 - Local development with Python HTTP server
@@ -130,42 +453,42 @@ The app uses a **Single Page Application (SPA)** architecture with dynamic page 
 
 ```
 Globemate2/
-├── index.html              # Main HTML entry point
-├── README.md               # This file
-├── ARCHITECTURE.md         # Detailed architecture documentation
-├── .git/                   # Version control
+├── index.html                # Main entry point (navbar, footer, Firebase config, all script tags)
+├── README.md                 # This file
+├── IMAGE_REFERENCES.md       # All Unsplash image URLs used in the app
 │
 ├── css/
-│   └── styles.css          # All styles (3800+ lines)
+│   └── styles.css            # Global styles (3800+ lines)
 │
 ├── js/
-│   ├── app.js              # Core utilities (toast, animations)
-│   ├── page-loader.js      # SPA navigation system
-│   ├── auth.js             # Shared authentication utilities
-│   ├── register.js         # Registration page module
-│   ├── login.js            # Login page module
-│   ├── home.js             # Home page module
-│   ├── trip-planner.js     # Trip planning module
-│   ├── country-info.js     # Country information module
-│   ├── safety.js           # Safety hub module
-│   ├── packing.js          # Packing list module
-│   ├── currency.js         # Currency converter module
-│   ├── documents.js        # Document manager module
-│   └── maps.js             # Interactive maps module
+│   ├── app.js                # Core utilities (splash screen, toast, fetchAPI wrapper)
+│   ├── page-loader.js        # SPA navigation — dynamic page loading system
+│   ├── auth.js               # Firebase Auth + Firestore gateway (Auth object)
+│   ├── login.js              # Login page module
+│   ├── register.js           # Registration page module
+│   ├── home.js               # Home/Hero page module
+│   ├── trip-planner.js       # Trip Planner module (REST Countries + Nominatim)
+│   ├── trip-ai-planner.js    # AI Trip Planner module (self-contained, no external API)
+│   ├── country-info.js       # Country Explorer (REST Countries + Wikipedia + Unsplash)
+│   ├── safety.js             # Safety Center module (hardcoded data)
+│   ├── packing.js            # Packing List module (localStorage)
+│   ├── currency.js           # Currency Converter (Exchange Rate API)
+│   ├── documents.js          # Document Storage module (localStorage)
+│   ├── maps.js               # Maps Explorer (Leaflet + Nominatim geocoding)
+│   └── animations.js         # UI animation helpers
 │
-├── pages/
-│   ├── home.html           # Hero landing page
-│   ├── register.html       # Registration form
-│   ├── login.html          # Login form
-│   ├── trip-planner.html   # Trip planning interface
-│   ├── country-info.html   # Country search & details
-│   ├── safety.html         # Safety information
-│   ├── packing.html        # Packing checklist
-│   ├── currency.html       # Currency converter
-│   ├── documents.html      # Document manager
-│   └── maps.html           # Map interface
-│
-└── img1.png - img5.jpg     # Background images & assets
+└── pages/
+    ├── home.html             # Hero landing page
+    ├── login.html            # Login form
+    ├── register.html         # Registration form
+    ├── trip-planner.html     # Trip planning interface
+    ├── trip-ai-planner.html  # AI trip planner interface
+    ├── country-info.html     # Country search & details
+    ├── safety.html           # Safety information
+    ├── packing.html          # Packing checklist
+    ├── currency.html         # Currency converter
+    ├── documents.html        # Document manager
+    └── maps.html             # Map interface
 ```
 
 ---
@@ -233,15 +556,51 @@ python -m http.server 8000
 ## 🔐 Authentication System
 
 ### Architecture
-- **Shared Utility**: `js/auth.js` provides a global `Auth` object backed by the **Firebase Auth compat v9 SDK**:
-  - `initFirebase()` — Initialises Firebase app, Auth, and Firestore (called once on script load)
-  - `signUp(name, email, password)` — Creates Firebase user, updates display name, fire-and-forgets Firestore profile write
-  - `login(email, password)` — Authenticates via `signInWithEmailAndPassword`
-  - `signInWithGoogle()` — OAuth popup via `GoogleAuthProvider`, fire-and-forgets Firestore upsert
-  - `logout()` — Calls `auth.signOut()`, restores default UI, redirects to Home
-  - `checkSession()` — Wraps `onAuthStateChanged` in a Promise; resolves immediately with current user or null
-  - `applyLoggedInUI()` — Updates navbar with user's display name, hides Home tab, adds Logout button
-  - `restoreLoggedOutUI()` — Restores default GlobeMate logo and navbar state
+`js/auth.js` provides a global `Auth` object backed by the **Firebase Auth compat v9 SDK**. The Firebase SDKs are loaded via CDN in `index.html` before any app scripts:
+
+```html
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+```
+
+The project config is declared as `window.FIREBASE_CONFIG` immediately after.
+
+### Auth Methods
+
+| Method | What it does |
+|---|---|
+| `initFirebase()` | Initialises Firebase app, Auth, and Firestore (called once on script load) |
+| `signUp(name, email, password)` | Creates Firebase user, updates display name, fire-and-forgets Firestore profile write |
+| `login(email, password)` | Authenticates via `signInWithEmailAndPassword` |
+| `signInWithGoogle()` | OAuth popup via `GoogleAuthProvider`, fire-and-forgets Firestore upsert |
+| `logout()` | Calls `auth.signOut()`, restores default UI, redirects to Home |
+| `checkSession()` | Wraps `onAuthStateChanged` in a Promise; resolves with current user or null |
+| `applyLoggedInUI()` | Updates navbar with user's display name, hides Home tab, adds Logout button |
+| `restoreLoggedOutUI()` | Restores default GlobeMate logo and navbar state |
+
+### Authentication Flow
+```
+User submits form
+       │
+       ▾
+  Auth.signUp() / Auth.login()
+       │
+       ▾
+  firebase.auth().create* / signIn*  ◄── Network call to Firebase
+       │
+       ▾
+  credential.user ← currentUser cached in module closure
+       │
+       ▾
+  [fire-and-forget] Firestore profiles/{uid}.set()
+       │
+       ▾
+  Auth.applyLoggedInUI()  ◄─── Synchronous DOM update
+       │
+       ▾
+  PageLoader.loadPage('country-info')  after 300ms toast
+```
 
 ### Registration Flow
 1. User clicks **Register** button on home page
@@ -249,12 +608,12 @@ python -m http.server 8000
 3. `js/register.js` validates inputs locally (name required, passwords match, min 8 chars)
 4. Calls `Auth.signUp()` → `firebase.auth().createUserWithEmailAndPassword()`
 5. `updateProfile({ displayName: name })` called asynchronously (non-blocking)
-6. Firestore `profiles/{uid}` document written asynchronously (fire-and-forget — does not block the user)
+6. Firestore `profiles/{uid}` document written asynchronously (fire-and-forget)
 7. `Auth.applyLoggedInUI()` updates the navbar immediately
 8. Redirects to **Countries** tab after 300ms toast display
 
 ### Login Flow
-1. User clicks **Log In** button or navigates to the login page
+1. User clicks **Log In** or navigates to login page
 2. Loads `pages/login.html` (Email, Password fields + Google button)
 3. `js/login.js` handles form submission
 4. Calls `Auth.login()` → `firebase.auth().signInWithEmailAndPassword()`
@@ -271,7 +630,7 @@ python -m http.server 8000
 - Firebase Auth persists the session in `IndexedDB` automatically (default browser persistence)
 - On app load (`DOMContentLoaded`), `Auth.checkSession()` listens to `onAuthStateChanged` once
 - If a session exists, `applyLoggedInUI()` is called before the first page renders
-- User stays logged in across refreshes without any extra configuration
+- User stays logged in across refreshes without extra configuration
 - Logout calls `auth.signOut()` which clears the persisted session
 
 ### UI Changes When Logged In
@@ -321,76 +680,282 @@ Each page is an independent module following this pattern:
 8. Updates navbar active state
 9. Scrolls to top smoothly
 
-### Home Module (`home.js`)
-- No dynamic functionality (static hero page)
-- Provides Register and Log In buttons
+### Module Details
 
-### Trip Planner (`trip-planner.js`)
-- Add/remove destinations
-- Date pickers for itinerary
-- Activity cards with notes
-- Local storage for persistence
+| Module | File | External API | Storage |
+|---|---|---|---|
+| Home | `home.js` | None | None |
+| Trip Planner | `trip-planner.js` | REST Countries, Nominatim | localStorage |
+| AI Trip Planner | `trip-ai-planner.js` | None (all local) | None |
+| Country Info | `country-info.js` | REST Countries, Wikipedia, Unsplash | In-memory cache |
+| Currency | `currency.js` | Exchange Rate API | In-memory cache |
+| Safety | `safety.js` | None (hardcoded) | None |
+| Packing | `packing.js` | None | localStorage |
+| Documents | `documents.js` | None | localStorage |
+| Maps | `maps.js` | Nominatim, OSM Tiles | None |
+| Login | `login.js` | Firebase (via Auth) | IndexedDB |
+| Register | `register.js` | Firebase (via Auth) | IndexedDB |
 
-### Country Info (`country-info.js`)
-- **Search System**:
-  - Real-time autocomplete with country flags
-  - Searches both common and official names
-  - Displays up to 8 matching suggestions
-  - Click to select and display full information
-- **Basic Information Display**:
-  - REST API: `https://restcountries.com/v3.1/all`
-  - Info cards showing: Capital, Region, Population, Languages, Currency, Timezone, Calling Code, Driving Side
-  - Country flag (SVG) and official name
-  - Clean grid layout (2 columns on desktop, 1 on mobile)
-- **Historical Overview Section** (NEW):
-  - Wikipedia REST API integration
-  - Fetches country summary on selection
-  - 2-3 paragraph historical and cultural context
-  - Direct link to full Wikipedia article
-  - Loading states and error handling
-- **Important Places Section** (NEW):
-  - Curated database of 64 tourist destinations
-  - High-quality images from Unsplash (400x300px)
-  - Place cards with image, icon overlay, description, and category badge
-  - Covers 16 popular countries
-  - Fallback to Wikipedia tourism information for other countries
-  - Responsive grid layout with hover animations
-- **Visa Eligibility Checker**:
-  - Located at bottom of page for logical flow
-  - Passport country selector (all 195+ countries)
-  - Compares against selected destination
-  - Visual status indicators (Visa-Free, Required, On Arrival)
-  - Color-coded results with detailed messaging
+---
 
-### Currency (`currency.js`)
-- Dropdown selectors for currencies
-- Real-time conversion via API
-- Amount input with validation
-- Historical rate charts (optional)
+## 🔌 APIs & Integrations — Complete Reference
 
-### Safety (`safety.js`)
-- Country selector
-- Emergency numbers display
-- Health advisories from WHO/CDC
-- Travel warnings
+### 1. REST Countries API
 
-### Packing (`packing.js`)
-- Category-based checklist (clothes, electronics, documents)
-- Add/remove custom items
-- Check/uncheck functionality
-- Save to local storage
+| Property | Details |
+|---|---|
+| **Endpoint** | `https://restcountries.com/v3.1/all?fields=name,capital,region,population,languages,currencies,flags,cca3,idd,car` |
+| **Second Endpoint** | `https://restcountries.com/v3.1/name/{query}?fields=name,flags,cca3` (trip-planner fallback search) |
+| **Used by** | `country-info.js` (main data), `trip-planner.js` (country autocomplete) |
+| **Auth** | None — free, open API |
+| **Rate Limit** | None |
+| **Data Retrieved** | Country names, flags (SVG), capitals, regions, population, languages, currencies, calling codes, driving side, country codes |
+| **Caching** | Loaded once on module init and cached in-memory for the session |
+| **Docs** | [restcountries.com](https://restcountries.com) |
 
-### Documents (`documents.js`)
-- File upload interface
-- Document type categorization
-- List view with delete options
-- (Note: Actual file storage requires backend)
+**How it's fetched:**
+```javascript
+// country-info.js — on module init
+const response = await fetch('https://restcountries.com/v3.1/all?fields=name,capital,...');
+const countries = await response.json();  // Array of 195+ country objects
+// Cached in CountryExplorer.countries[] for all subsequent searches
+```
 
-### Maps (`maps.js`)
-- Leaflet.js map initialization
-- Search box for locations
-- Marker placement
-- Routing between points
+**How results are used:**
+- Populates search autocomplete with country names + flags
+- Renders info cards (capital, region, population, languages, etc.)
+- Fills passport dropdown for visa checker
+- Provides country data for trip planner destination search
+
+---
+
+### 2. Wikipedia REST API
+
+| Property | Details |
+|---|---|
+| **Endpoint 1** | `https://en.wikipedia.org/api/rest_v1/page/summary/{countryName}` |
+| **Endpoint 2** | `https://en.wikipedia.org/api/rest_v1/page/summary/Tourism in {countryName}` (fallback for places) |
+| **Used by** | `country-info.js` |
+| **Auth** | None |
+| **Rate Limit** | Standard Wikipedia limits (reasonable use) |
+| **Data Retrieved** | `extract` (2-3 paragraph summary), `content_urls` (link to full article), `title` |
+| **Docs** | [wikimedia.org/api/rest_v1](https://en.wikipedia.org/api/rest_v1/) |
+
+**How it's fetched:**
+```javascript
+// country-info.js — when user selects a country
+const wikiUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${country.name.common}`;
+const response = await fetch(wikiUrl);
+const data = await response.json();
+// data.extract → historical overview text
+// data.content_urls.desktop.page → "Read more" link
+```
+
+**How results are used:**
+- **History section**: Renders `data.extract` as 2-3 paragraphs of country history
+- **Tourism fallback**: When curated places aren't available for a country, fetches `Tourism in {country}` article summary
+- Provides "Read more on Wikipedia" link to full article
+- Shows loading spinner during fetch, error message on failure
+
+---
+
+### 3. Exchange Rate API
+
+| Property | Details |
+|---|---|
+| **Endpoint** | `https://api.exchangerate-api.com/v4/latest/USD` |
+| **Used by** | `currency.js` |
+| **Auth** | None (free tier) |
+| **Rate Limit** | Standard free tier limits |
+| **Data Retrieved** | `rates` object — 160+ currency codes mapped to USD exchange rates |
+| **Fallback** | Hardcoded rates object if API call fails |
+
+**How it's fetched:**
+```javascript
+// currency.js — on module init
+const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+const data = await response.json();
+// data.rates = { EUR: 0.92, GBP: 0.79, INR: 84.0, JPY: 149.5, ... }
+```
+
+**How results are used:**
+- Stores `data.rates` in memory
+- `convert()`: calculates `amount × (rates[toCurrency] / rates[fromCurrency])`
+- `swap()`: switches from/to currencies and recalculates
+- Falls back to hardcoded rates on network failure
+
+---
+
+### 4. Nominatim (OpenStreetMap) Geocoding API
+
+| Property | Details |
+|---|---|
+| **Forward Geocode** | `https://nominatim.openstreetmap.org/search?format=json&q={query}&limit=5&addressdetails=1` |
+| **Reverse Geocode** | `https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&zoom=18&addressdetails=1` |
+| **Reverse (Trip)** | `https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&zoom=10` |
+| **Used by** | `maps.js` (search + click), `trip-planner.js` (detect location) |
+| **Auth** | None (rate-limited, free service) |
+| **Rate Limit** | 1 request/second (best practice) |
+
+**How it's fetched and used:**
+
+```javascript
+// maps.js — Forward geocoding (user types location in search box)
+const response = await fetch(
+  `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=5&addressdetails=1`
+);
+const results = await response.json();
+// results[0] = { lat, lon, display_name, address: { city, country, ... } }
+// → Map flies to coordinates, marker added with popup
+
+// maps.js — Reverse geocoding (user clicks on map)
+const response = await fetch(
+  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+);
+const data = await response.json();
+// data.address = { city, state, country, ... }
+// → Popup shows formatted address at click point
+
+// trip-planner.js — Detect user's city from browser geolocation
+const response = await fetch(
+  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`
+);
+const data = await response.json();
+// data.address.city → auto-fills the "From" field
+```
+
+---
+
+### 5. OpenStreetMap Tile Server
+
+| Property | Details |
+|---|---|
+| **URL Pattern** | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` |
+| **Used by** | `maps.js` (Leaflet.js tile layer) |
+| **Auth** | None |
+| **Purpose** | Renders the visual map layer in the interactive map |
+
+**How it's integrated:**
+```javascript
+// maps.js — Leaflet tile layer initialization
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+```
+
+---
+
+### 6. Firebase (Auth + Firestore)
+
+| Property | Details |
+|---|---|
+| **SDK** | Firebase compat v9 via `gstatic.com` CDN |
+| **Auth Methods** | `createUserWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInWithPopup` (Google), `signOut`, `onAuthStateChanged`, `updateProfile` |
+| **Firestore** | `profiles` collection — one document per user keyed by UID |
+| **Session** | Automatic persistence via IndexedDB |
+| **Used by** | `auth.js` (exclusively — all other modules go through `Auth.*`) |
+| **Auth Required** | **Yes** — Firebase API key in `window.FIREBASE_CONFIG` |
+| **Docs** | [firebase.google.com/docs](https://firebase.google.com/docs) |
+
+**How it's integrated:**
+```javascript
+// auth.js — initialization (called once)
+firebase.initializeApp(window.FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Sign up
+const credential = await auth.createUserWithEmailAndPassword(email, password);
+await credential.user.updateProfile({ displayName: name });
+db.collection('profiles').doc(credential.user.uid).set({  // fire-and-forget
+  full_name: name, email: email, created_at: new Date().toISOString()
+});
+
+// Login
+const credential = await auth.signInWithEmailAndPassword(email, password);
+
+// Google OAuth
+const provider = new firebase.auth.GoogleAuthProvider();
+const result = await auth.signInWithPopup(provider);
+
+// Session check
+auth.onAuthStateChanged(user => { /* user or null */ });
+```
+
+---
+
+### 7. CDN Libraries (loaded in `index.html`)
+
+| Library | CDN URL | Purpose |
+|---|---|---|
+| Font Awesome 6.5.1 | `cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css` | Icon library |
+| Google Fonts | `fonts.googleapis.com/css2?family=...` | Inter, Playfair Display, Pacifico, Great Vibes, Dancing Script, Poppins |
+| Leaflet.js 1.9.4 CSS | `unpkg.com/leaflet@1.9.4/dist/leaflet.css` | Map styles |
+| Leaflet.js 1.9.4 JS | `unpkg.com/leaflet@1.9.4/dist/leaflet.js` | Map library |
+| Firebase App | `gstatic.com/firebasejs/9.23.0/firebase-app-compat.js` | Firebase core |
+| Firebase Auth | `gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js` | Authentication SDK |
+| Firebase Firestore | `gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js` | Database SDK |
+
+### 8. Image Sources
+
+| Source | URL Pattern | Used for |
+|---|---|---|
+| Unsplash CDN | `images.unsplash.com/photo-{id}?w={w}&h={h}&fit=crop` | Country banners (1200×400) + tourist place cards (400×300) |
+| FlagCDN | `flagcdn.com/{code}.svg` | Country flags (fallback) |
+| Placeholder | `via.placeholder.com/400x300?text={name}` | Fallback on image load error |
+
+---
+
+## 🔄 API Data Flow — How Each API Is Fetched & Used
+
+### Summary Table
+
+| API | Trigger | File | Fetch Method | Response Format | Caching | Fallback |
+|---|---|---|---|---|---|---|
+| REST Countries | Module init | `country-info.js` | `fetch()` → `.json()` | Array of country objects | In-memory (session) | Hardcoded fallback data |
+| REST Countries | Search input | `trip-planner.js` | `fetch()` → `.json()` | Array of matching countries | None | Silent fail |
+| Wikipedia | Country selected | `country-info.js` | `fetch()` → `.json()` | `{ extract, content_urls }` | None | "Info unavailable" message |
+| Exchange Rate | Module init | `currency.js` | `fetch()` → `.json()` | `{ rates: { ... } }` | In-memory (session) | Hardcoded rate table |
+| Nominatim Search | Search submit | `maps.js` | `fetch()` → `.json()` | Array of `{ lat, lon, display_name }` | None | No results message |
+| Nominatim Reverse | Map click / geoloc | `maps.js`, `trip-planner.js` | `fetch()` → `.json()` | `{ address: { city, ... } }` | None | Coordinates shown |
+| OSM Tiles | Map render | `maps.js` | Leaflet auto-fetch | PNG tile images | Browser cache | Blank tiles |
+| Firebase Auth | Form submit | `auth.js` | Firebase SDK methods | User credential object | IndexedDB (auto) | Error toast |
+| Firebase Firestore | After auth | `auth.js` | `db.collection().doc().set()` | None (fire-and-forget) | None | Silent fail |
+
+### Files With No External API Calls
+
+| File | Notes |
+|---|---|
+| `safety.js` | Uses hardcoded safety data (future: safety index API) |
+| `packing.js` | Purely local logic, localStorage only |
+| `documents.js` | Purely local logic, localStorage only |
+| `home.js` | Static hero page, no external calls |
+| `login.js` | Uses `Auth` module but no direct fetch |
+| `register.js` | Uses `Auth` module but no direct fetch |
+| `animations.js` | UI animations only |
+| `trip-ai-planner.js` | All itinerary data computed locally (no external AI API) |
+| `page-loader.js` | Only fetches local `pages/{id}.html` files |
+
+---
+
+## 🌐 External Domains Contacted
+
+| Domain | Protocol | Used by | Auth Required |
+|---|---|---|---|
+| `restcountries.com` | HTTPS | `country-info.js`, `trip-planner.js` | No |
+| `api.exchangerate-api.com` | HTTPS | `currency.js` | No (free tier) |
+| `nominatim.openstreetmap.org` | HTTPS | `maps.js`, `trip-planner.js` | No (rate-limited) |
+| `en.wikipedia.org` | HTTPS | `country-info.js` | No |
+| `{s}.tile.openstreetmap.org` | HTTPS | `maps.js` (Leaflet tiles) | No |
+| `*.firebaseapp.com` / `*.googleapis.com` | HTTPS | `auth.js` (via Firebase SDK) | **Yes — Firebase API key** |
+| `cdnjs.cloudflare.com` | HTTPS | `index.html` (Font Awesome) | No |
+| `fonts.googleapis.com` | HTTPS | `index.html` (Google Fonts) | No |
+| `unpkg.com` | HTTPS | `index.html` (Leaflet) | No |
+| `gstatic.com` | HTTPS | `index.html` (Firebase SDKs) | No |
+| `images.unsplash.com` | HTTPS | `country-info.js` (images) | No |
+| `flagcdn.com` | HTTPS | `country-info.js` (flags) | No |
+
+> **Note:** The only API key in the project is the Firebase configuration in `index.html`. This is normal for client-side Firebase — security is enforced via Firebase Security Rules, not key secrecy.
 
 ---
 
@@ -457,283 +1022,64 @@ Located in `:root` CSS variables (`styles.css`):
 
 ---
 
-## 🔌 APIs & Integrations
+## 🧩 Common Patterns
 
-### REST Countries API
-- **Endpoint**: `https://restcountries.com/v3.1/all`
-- **Usage**: Comprehensive country database with 195+ countries
-- **Data Retrieved**: 
-  - Country names (common and official)
-  - Flags (SVG format)
-  - Capital cities
-  - Geographic regions and subregions
-  - Population statistics
-  - Languages spoken
-  - Currency information (name, symbol, code)
-  - Calling codes (IDD)
-  - Driving side (left/right)
-  - Country codes (cca3, cca2)
-- **Implementation**: 
-  - Loaded on page init and cached for performance
-  - Search functionality with autocomplete
-  - Dropdown population for visa checker
-- **Rate Limit**: None (free, open API)
-- **Docs**: [restcountries.com](https://restcountries.com)
+### Saving Data to LocalStorage
+```javascript
+const data = { /* your data */ };
+localStorage.setItem('globemateKey', JSON.stringify(data));
+```
 
-### Wikipedia REST API
-- **Endpoint**: `https://en.wikipedia.org/api/rest_v1/page/summary/{country}`
-- **Usage**: Fetches historical overview and cultural information for searched countries
-- **Data Retrieved**:
-  - Country summary (extract) - 2-3 paragraph overview
-  - Title and page information
-  - Links to full Wikipedia articles
-  - Fallback: Tourism page information if main page unavailable
-- **Implementation**: 
-  - Async fetch when country is selected
-  - Error handling with graceful fallback messages
-  - Loading states with spinner animation
-  - Direct link to full Wikipedia article for more details
-- **Rate Limit**: Standard Wikipedia API limits (reasonable use)
-- **Docs**: [wikimedia.org/api/rest_v1](https://en.wikipedia.org/api/rest_v1/)
+### Loading Data from LocalStorage
+```javascript
+const saved = localStorage.getItem('globemateKey');
+const data = saved ? JSON.parse(saved) : [];
+```
 
-### Image Sources (Unsplash)
-- **Source**: Unsplash Image CDN
-- **Usage**: High-quality tourist destination images for important places
-- **Implementation**:
-  - Curated image URLs for 64 popular tourist destinations
-  - 400x300px optimized sizes with crop parameter
-  - Fallback to placeholder if image fails to load
-  - Images embedded in places database
-- **Countries Covered**: France, Japan, Italy, Spain, UK, USA, China, Egypt, India, Australia, Brazil, Germany, Canada, Mexico, Greece, Thailand
-- **Attribution**: Images from Unsplash (free to use)
-- **Docs**: [unsplash.com](https://unsplash.com)
+### Showing Toast Notifications
+```javascript
+showToast('Success message', 'success');
+showToast('Error message', 'error');
+showToast('Info message', 'info');
+// Global helper defined in app.js — no namespace required
+```
 
-### Exchange Rate API (Example)
-- **Endpoint**: `https://api.exchangerate-api.com/v4/latest/USD`
-- **Usage**: Real-time currency conversion
-- **Note**: Replace with preferred API (Fixer, Currency Layer, etc.)
+### Module API Examples
+```javascript
+// Trip Planner
+TripPlanner.init()           // Initialize module
+TripPlanner.saveTrip()       // Save new trip
+TripPlanner.deleteTrip(id)   // Delete trip by ID
 
-### Leaflet.js
-- **CDN**: `https://unpkg.com/leaflet@1.9.4/`
-- **Usage**: Interactive maps with markers
-- **Docs**: [leafletjs.com](https://leafletjs.com)
+// Country Explorer
+CountryExplorer.init()                  // Initialize module
+CountryExplorer.selectCountry(code)     // Load country by code
 
-### Firebase
-- **Purpose**: User authentication & NoSQL database
-- **SDK**: Firebase compat v9 (`firebase-app-compat.js`, `firebase-auth-compat.js`, `firebase-firestore-compat.js`) loaded via `gstatic.com` CDN
-- **Features Used**:
-  - **Auth**: `createUserWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInWithPopup` (Google), `signOut`, `onAuthStateChanged`, `updateProfile`
-  - **Firestore**: `profiles` collection — one document per user keyed by UID, fields: `full_name`, `email`, `created_at`
-  - **Session persistence**: Automatic via Firebase's built-in IndexedDB cache
-- **Config location**: `window.FIREBASE_CONFIG` object in `index.html`
-- **Auth initialised**: Once on script load via `Auth.initFirebase()`; subsequent calls are no-ops
-- **Docs**: [firebase.google.com/docs](https://firebase.google.com/docs)
+// Currency Converter
+CurrencyConverter.init()                // Initialize module
+CurrencyConverter.convert()             // Convert currencies
+CurrencyConverter.swap()                // Swap currencies
+CurrencyConverter.fetchRates()          // Update rates
+
+// Packing List
+PackingList.init()                      // Initialize module
+PackingList.generateList()              // Generate packing list
+PackingList.toggleItem(id)              // Toggle item check
+```
 
 ---
 
-## 🌟 Country Information Module - Detailed Integration
+## 🔧 Troubleshooting
 
-### Feature Overview
-The Country Information module is one of the most feature-rich sections, combining multiple APIs and data sources to provide comprehensive travel information.
-
-### Data Flow Architecture
-
-1. **Initial Load**
-   ```javascript
-   // On module init
-   CountryExplorer.init()
-   └── loadCountries()
-       └── fetch('https://restcountries.com/v3.1/all')
-           └── Cache 195+ countries locally
-           └── Populate passport dropdown
-   ```
-
-2. **Country Search**
-   ```javascript
-   // User types in search bar
-   handleSearch(query)
-   └── Filter cached countries by name
-   └── showSuggestions() with flags
-   └── User clicks → selectCountry(code)
-   ```
-
-3. **Country Selection Triggers Three Parallel Data Loads**
-   ```javascript
-   selectCountry(code)
-   ├── displayCountryInfo(country)        // From cached data
-   ├── loadCountryHistory(country)        // Wikipedia API call
-   └── loadImportantPlaces(country)       // Local database + images
-   ```
-
-### Wikipedia Integration (History Section)
-
-**Purpose**: Provide cultural and historical context for each country
-
-**Implementation**:
-```javascript
-async loadCountryHistory(country) {
-  const wikiUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${country.name.common}`;
-  const response = await fetch(wikiUrl);
-  const data = await response.json();
-  
-  // Display extract (2-3 paragraph summary)
-  // Show "Read more on Wikipedia" link
-  // Error handling: "Historical information unavailable"
-}
-```
-
-**Benefits**:
-- Real-time, accurate information from Wikipedia
-- Always up-to-date content
-- Covers virtually every country
-- Provides cultural context for travelers
-
-### Important Places Integration
-
-**Purpose**: Showcase must-visit tourist destinations with visual appeal
-
-**Architecture**:
-- **Curated Database**: 64 hand-picked destinations across 16 countries
-- **Image Integration**: High-quality Unsplash images (400x300px)
-- **Fallback System**: Wikipedia tourism page for uncovered countries
-
-**Data Structure**:
-```javascript
-{
-  name: "Eiffel Tower",
-  description: "Iconic iron lattice tower in Paris, symbol of France",
-  type: "Landmark",
-  icon: "landmark",  // FontAwesome icon
-  image: "https://images.unsplash.com/photo-..." // Optimized URL
-}
-```
-
-**Display Features**:
-- Grid layout (responsive: 3 columns → 2 → 1)
-- Image cards with hover effects (scale 1.1)
-- Icon overlay in top-right corner
-- Category badges (Landmark, Museum, Nature, etc.)
-- Loading states and error handling
-
-**Covered Countries**:
-1. **Europe**: France, Italy, Spain, UK, Germany, Greece
-2. **Asia**: Japan, China, India, Thailand
-3. **Americas**: USA, Canada, Brazil, Mexico
-4. **Oceania**: Australia
-5. **Africa**: Egypt
-
-### Visa Checker Integration
-
-**Purpose**: Help travelers understand entry requirements
-
-**Implementation**:
-- Compares user's passport country against destination country
-- Simplified logic with extensible architecture
-- Three status types: Visa-Free, Visa Required, Visa on Arrival
-- Visual indicators with color coding (green, amber, blue)
-
-**Flow**:
-```javascript
-checkVisa()
-├── Get selected passport country
-├── Get current destination country
-└── getVisaRequirement(passport, destination)
-    ├── Same country? → "No visa required"
-    ├── Strong passport + easy destination? → "Visa-free"
-    └── Default → "Visa required"
-```
-
-### Performance Optimizations
-
-1. **Data Caching**: Countries loaded once, cached in memory
-2. **Lazy Loading**: History and places only load when country selected
-3. **Image Optimization**: Pre-sized URLs (400x300) reduce bandwidth
-4. **Search Debouncing**: Reduces API calls during typing
-5. **Error Recovery**: Graceful fallbacks prevent broken UI
-
-### User Experience Flow
-
-```
-User Journey: Search for "Japan"
-│
-├─ [1] Types "jap" → Autocomplete shows Japan with flag
-├─ [2] Clicks Japan → Basic info displays instantly (cached)
-├─ [3] Loading spinners appear for History & Places
-├─ [4] History loads (~500ms) → Wikipedia summary appears
-├─ [5] Places load instantly → 4 cards: Mount Fuji, Imperial Palace, Fushimi Inari, Hiroshima
-├─ [6] User scrolls down → Visa checker ready at bottom
-└─ [7] Selects passport country → Instant visa status
-```
-
-### Code Organization
-
-**Files**:
-- `js/country-info.js` - Main module (520+ lines)
-- `pages/country-info.html` - UI structure with new sections
-- `css/styles.css` - Styling for history cards, place cards, responsive design
-
-**Key Functions**:
-- `loadCountries()` - Bootstrap REST Countries API data
-- `handleSearch()` - Real-time search with suggestions
-- `selectCountry()` - Orchestrates data display
-- `displayCountryInfo()` - Renders basic country stats
-- `loadCountryHistory()` - Wikipedia API integration
-- `loadImportantPlaces()` - Places rendering with images
-- `getImportantPlaces()` - Curated destination database
-- `fetchPlacesFromWikipedia()` - Fallback for uncovered countries
-- `checkVisa()` - Visa status determination
-
-### Future Enhancements
-- [ ] Real visa requirement database integration
-- [ ] More countries in curated places database
-- [ ] User reviews and ratings for places
-- [ ] Save favorite destinations
-- [ ] Export country information as PDF
-- [ ] Weather information integration
-- [ ] Cost of living comparison
-
----
-
-## 🧩 Core Utilities (`app.js`)
-
-### Toast Notifications
-```javascript
-showToast(message, type)
-// type: 'success', 'error', 'info'
-// Displays animated toast in top-right corner
-```
-
-### Page Loader System
-- SPA navigation without full page reloads
-- History API integration (optional)
-- Module lifecycle management (init/cleanup)
-- Automatic navbar state updates
-
-### Utilities
-- Theme toggle (light/dark mode) - Optional
-- Local storage helpers
-- Debounce/throttle functions
-- Form validation helpers
-
----
-
-## 🎬 Animation Enhancements
-
-### Implemented Animations
-1. **Splash Screen**: Logo pulse + loading bar
-2. **Page Transitions**: Fade in/out with transform
-3. **Navbar Scroll**: Transparent → solid with shadow
-4. **Hero Gradient**: Animated background shift
-5. **Card Hover**: Lift + shadow increase
-6. **Button Interactions**: Scale + color shift
-7. **Form Focus**: Border glow + shadow
-
-### Coming Soon
-- Parallax scrolling on hero
-- Skeleton loading screens
-- Micro-interactions on icons
-- Confetti on successful registration
-- Map marker animations
+| Issue | Solution |
+|---|---|
+| Page not loading | Check that HTML file exists in `pages/` with name matching `data-tab` attribute |
+| Module not initializing | Ensure module is registered with PageLoader and script is loaded in `index.html` |
+| Events not working after page switch | Re-attach event listeners in module's `init()` method, not globally |
+| Data persisting between pages | Implement proper `cleanup()` method to reset module state |
+| Firebase auth errors | Verify `FIREBASE_CONFIG` in `index.html` and that Auth/Firestore are enabled in Firebase Console |
+| Currency rates not loading | API may be rate-limited; hardcoded fallback rates will be used automatically |
+| Map tiles not rendering | Check network connectivity; OSM tile server may have temporary issues |
 
 ---
 
@@ -748,7 +1094,7 @@ showToast(message, type)
 
 ### Code Style
 - Use ES6+ features (const, let, arrow functions, async/await)
-- Follow existing module pattern
+- Follow existing IIFE module pattern
 - Comment complex logic
 - Keep functions small and focused
 - Use semantic HTML5 tags
@@ -762,6 +1108,25 @@ showToast(message, type)
 - [ ] Logout restores default UI
 - [ ] Responsive design works on mobile
 - [ ] No console errors
+
+---
+
+## 🚀 Future Enhancements
+
+- [ ] Add webpack/bundler for optimised builds
+- [ ] Implement code splitting for better performance
+- [ ] Add TypeScript for type safety
+- [ ] Create unit tests for each module
+- [ ] Add service worker for offline support
+- [ ] Implement proper routing with URL hash/history API
+- [ ] Firestore security rules — lock `profiles/{uid}` to authenticated owner
+- [ ] Firebase Analytics integration for usage tracking
+- [ ] Real visa requirement database integration
+- [ ] More countries in curated places database
+- [ ] Weather information integration
+- [ ] Cost of living comparison
+- [ ] User reviews and ratings for places
+- [ ] Export country information as PDF
 
 ---
 
@@ -798,11 +1163,13 @@ SOFTWARE.
 ## 🙏 Acknowledgments
 
 - **Font Awesome** for comprehensive icon library
-- **Google Fonts** (Inter, Playfair Display) for typography
+- **Google Fonts** (Inter, Playfair Display, Pacifico, Poppins) for typography
 - **Firebase** for Authentication and Cloud Firestore database
 - **Leaflet.js** for interactive map functionality
 - **REST Countries API** for comprehensive country data
 - **Wikipedia REST API** for historical and cultural information
+- **Exchange Rate API** for live currency conversion rates
+- **Nominatim / OpenStreetMap** for geocoding and map tiles
 - **Unsplash** for high-quality tourist destination images
 - Open-source community for inspiration and support
 
