@@ -40,6 +40,7 @@
     init() {
       this.bindEvents();
       this.loadSavedList();
+      this.loadPrefillData();
     },
 
     bindEvents() {
@@ -49,6 +50,31 @@
           e.preventDefault();
           this.generateList();
         });
+      }
+    },
+
+    loadPrefillData() {
+      const prefillData = localStorage.getItem('globemate_packing_prefill');
+      if (prefillData) {
+        try {
+          const data = JSON.parse(prefillData);
+          
+          // Set form values only - DO NOT auto-generate
+          if (data.destType && document.getElementById('packDest')) {
+            document.getElementById('packDest').value = data.destType;
+          }
+          if (data.duration && document.getElementById('packDuration')) {
+            document.getElementById('packDuration').value = data.duration;
+          }
+          if (data.travelers && document.getElementById('packTravelers')) {
+            document.getElementById('packTravelers').value = data.travelers;
+          }
+          
+          // Clear the prefill data after using it
+          localStorage.removeItem('globemate_packing_prefill');
+        } catch (e) {
+          console.error('Error loading packing prefill data:', e);
+        }
       }
     },
 
@@ -99,7 +125,7 @@
       // Add destination-specific items
       if (destItems) {
         this.addCategory('✨ Essentials', destItems.essentials);
-        this.addCategory('👔 Clothing', this.adjustForDuration(destItems.clothing, duration));
+        this.addCategory('👔 Clothing', this.adjustForDuration(destItems.clothing, duration, travelers));
         this.addCategory('🎒 Accessories', destItems.accessories);
       }
 
@@ -132,6 +158,19 @@
         ]);
       }
 
+      // Add group travel items for multiple travelers
+      if (travelers > 1) {
+        const groupItems = [];
+        if (travelers === 2) {
+          groupItems.push('Couple travel itinerary copies', 'Shared power bank');
+        } else if (travelers > 2) {
+          groupItems.push('Group itinerary/meeting plan', 'Extra power banks (for group)', 'Group emergency contact list');
+        }
+        if (groupItems.length > 0) {
+          this.addCategory('👥 Group Travel', groupItems);
+        }
+      }
+
       // Add miscellaneous
       this.addCategory('🎯 Miscellaneous', [
         'Reusable bags',
@@ -146,13 +185,22 @@
       this.renderList();
     },
 
-    adjustForDuration(items, duration) {
-      // Suggest quantities based on duration
+    adjustForDuration(items, duration, travelers = 1) {
+      // Suggest quantities based on duration and number of travelers
       return items.map(item => {
-        if (duration > 7) {
-          return `${item} (${Math.ceil(duration / 3)}x)`;
+        let quantity = 1;
+        
+        // Adjust for duration only for items that need multiple copies
+        if ((item.includes('shorts') || item.includes('pants') || item.includes('shirt') || item.includes('dress')) && duration > 7) {
+          quantity = Math.ceil(duration / 3);
         }
-        return item;
+        
+        // Note if item needed for multiple travelers
+        if (travelers > 1 && (item.includes('shirt') || item.includes('shorts') || item.includes('dress') || item.includes('pants') || item.includes('jacket'))) {
+          return `${item} (${travelers}x)`;
+        }
+        
+        return quantity > 1 ? `${item} (${quantity}x)` : item;
       });
     },
 

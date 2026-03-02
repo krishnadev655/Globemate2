@@ -406,7 +406,7 @@
     .tap-tips-ul li i { color: #f59e0b; margin-top: 2px; flex-shrink: 0; }
 
     /* back bar */
-    .tap-back-bar { text-align: center; padding: 26px 20px 0; }
+    .tap-back-bar { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; padding: 26px 20px 0; }
     .tap-back-btn {
       display: inline-flex; align-items: center; gap: 8px;
       padding: 10px 22px; border-radius: 10px;
@@ -1067,16 +1067,18 @@
     return isNaN(k) ? null : k;
   }
 
-  function getTier(budgetStr) {
+  function getTier(budgetStr, accommodation = '') {
+    // Check budget string first
     const b = (budgetStr || '').toLowerCase();
     if (b.includes('luxury') || b.includes('premium') || b.includes('5 star')) return 'luxury';
     if (b.includes('budget') || b.includes('backpack') || b.includes('hostel') || b.includes('low') || b.includes('cheap')) return 'budget';
-    const amt = parseBudgetINR(budgetStr);
-    if (amt !== null) {
-      if (amt >= 500000) return 'luxury';
-      if (amt <= 80000)  return 'budget';
-      return 'mid';
-    }
+    
+    // Check accommodation if budget not provided
+    const accom = (accommodation || '').toLowerCase();
+    if (accom.includes('luxury') || accom.includes('5-star')) return 'luxury';
+    if (accom.includes('budget') || accom.includes('hostel') || accom.includes('dorm')) return 'budget';
+    
+    // Default to mid-range
     return 'mid';
   }
 
@@ -1102,8 +1104,8 @@
 
   function buildBudget(tier, days, pax, mode, accom, budgetInput) {
     const d = DAILY[tier] || DAILY.mid;
-    const flight  = Math.round((FLIGHT_BASE[mode] || 400) * (TIER_MULT[tier] || 1));
-    const hotel   = accom.rate * days;          // per person per night → total nights
+    const flight  = Math.round((FLIGHT_BASE[mode] || 400) * (TIER_MULT[tier] || 1)) * pax;  // multiply by pax
+    const hotel   = accom.rate * days * pax;          // per person per night × days × pax
     const food    = d.food * days * pax;
     const act     = d.act  * days * pax;
     const local   = d.local* days * pax;
@@ -1116,7 +1118,7 @@
 
     return {
       items: [
-        { label:'Transport',        usd: flight * pax, icon:'plane',        color:'#3b82f6' },
+        { label:'Transport',        usd: flight, icon:'plane',        color:'#3b82f6' },
         { label:'Accommodation',    usd: hotel,        icon:'bed',          color:'#8b5cf6' },
         { label:'Food & Dining',    usd: food,         icon:'utensils',     color:'#f59e0b' },
         { label:'Activities & Entry',usd:act,          icon:'ticket-alt',   color:'#10b981' },
@@ -1135,8 +1137,8 @@
     const facts    = getFacts(trip.destination);
     const days     = prefs.duration || 5;
     const dest     = trip.destination || 'your destination';
-    const pax      = trip.passengers || 1;
-    const tier     = getTier(prefs.budget);
+    const pax      = prefs.travelers || trip.passengers || 1;
+    const tier     = getTier(prefs.budget, prefs.accommodation);
     const accom    = buildAccom(prefs.accommodation, tier);
     const budget   = buildBudget(tier, days, pax, trip.travelMode, accom, prefs.budget);
     const places   = [...facts.places];
@@ -1574,20 +1576,25 @@
       parse: ans => { const n = parseInt(ans); return isNaN(n) ? 5 : n; }
     },
     {
-      id: 'budget',
-      ai: (t,p) => `Perfect — <strong>${p.duration} days</strong> in ${t.destination}!\n\n<strong>What is your approximate total budget in ₹ (Rupees)?</strong>\n<small style="color:#94a3b8">(Include flights, stay, food & activities for all ${t.passengers||1} passenger${(t.passengers||1)>1?'s':''})</small>`,
-      chips: ['₹30,000–50,000','₹50,000–1 Lakh','₹1–2 Lakhs','₹2–5 Lakhs','₹5–10 Lakhs','Luxury (10L+)'],
-      key: 'budget', multi: false, free: true
-    },
-    {
       id: 'accommodation',
-      ai: (_t,p) => `Budget noted as <strong>${p.budget}</strong>.\n\n<strong>Preferred type of accommodation?</strong>`,
+      ai: (t,p) => `Perfect — <strong>${p.duration} days</strong> in ${t.destination}!\n\n<strong>Preferred type of accommodation?</strong>`,
       chips: ['Luxury 5-Star Hotel','3–4 Star Hotel','Budget Hotel / Guesthouse','Hostel / Dormitory','Airbnb / Apartment','No preference'],
       key: 'accommodation', multi: false, free: true
     },
     {
+      id: 'travelers',
+      ai: (_t,p) => `Staying at a <strong>${p.accommodation}</strong>! 🛎️\n\n<strong>How many travelers are going on this trip?</strong>`,
+      chips: ['1 Person','2 People','3 People','4 People','5+ People'],
+      key: 'travelers', multi: false, free: true,
+      parse: ans => { 
+        const n = parseInt(ans);
+        if (ans.includes('5')) return 5;
+        return isNaN(n) ? 1 : n;
+      }
+    },
+    {
       id: 'interests',
-      ai: (_t,p) => `Staying at a <strong>${p.accommodation}</strong>! 🛎️\n\n<strong>What are your main interests?</strong> (Select all that apply, then click ✓ Confirm)`,
+      ai: (_t,p) => `Perfect — <strong>${p.travelers} traveler${p.travelers>1?'s':''}</strong> travelling together!\n\n<strong>What are your main interests?</strong> (Select all that apply, then click ✓ Confirm)`,
       chips: ['History & Culture','Food & Cuisine','Adventure & Hiking','Shopping','Nightlife','Nature & Wildlife','Photography','Relaxation & Spa'],
       key: 'interests', multi: true, free: true
     },
@@ -1607,6 +1614,33 @@
   function calcDays(s, e) {
     const d = new Date(e) - new Date(s);
     return Math.max(1, Math.round(d / 86400000));
+  }
+
+  // Map destination to packing destination type
+  function getPackingDestinationType(destination) {
+    const dest = (destination || '').toLowerCase();
+    const maps = {
+      beach: ['maldives', 'bali', 'mauritius', 'seychelles', 'fiji', 'thailand', 'caribbean', 'goa', 'andaman', 'lakshadweep'],
+      city: ['paris', 'london', 'new york', 'tokyo', 'dubai', 'singapore', 'mumbai', 'delhi', 'bangalore', 'new orleans', 'los angeles', 'san francisco', 'chicago', 'berlin', 'rome', 'barcelona', 'amsterdam'],
+      mountain: ['switzerland', 'nepal', 'bhutan', 'himalayas', 'alps', 'himachal', 'uttarakhand', 'darjeeling', 'sikkim', 'manali', 'shimla', 'kashmir'],
+      winter: ['scandinavia', 'norway', 'iceland', 'canada', 'alaska', 'siberia', 'lapland', 'finland', 'sweden', 'japan skiing', 'korea'],
+      adventure: ['south africa', 'national parks', 'costa rica', 'peru', 'amazon', 'explorer', 'safari', 'hiking', 'trekking', 'yosemite', 'yellowstone'],
+    };
+    
+    for (const [type, locations] of Object.entries(maps)) {
+      if (locations.some(loc => dest.includes(loc) || loc.includes(dest))) {
+        return type;
+      }
+    }
+    
+    // Default based on keywords
+    if (dest.includes('beach') || dest.includes('island') || dest.includes('tropical')) return 'beach';
+    if (dest.includes('mountain') || dest.includes('hill') || dest.includes('trek') || dest.includes('hiking')) return 'mountain';
+    if (dest.includes('cold') || dest.includes('winter') || dest.includes('snow')) return 'winter';
+    if (dest.includes('adventure') || dest.includes('safari') || dest.includes('outdoor')) return 'adventure';
+    if (dest.includes('city') || dest.includes('urban')) return 'city';
+    
+    return 'city'; // default
   }
 
   /* ──────────────────────────────────────────
@@ -1709,7 +1743,7 @@
     <div class="tap-prog-card">
       <div class="tap-prog-head"><i class="fas fa-tasks"></i> Planning Progress</div>
       <div id="tapProgRows">
-        ${[['purpose','Purpose of Travel'],['duration','Trip Duration'],['budget','Total Budget (₹)'],['accommodation','Accommodation'],['interests','Interests'],['dietary','Dietary / Special']].map(([k,l])=>`
+        ${[['purpose','Purpose of Travel'],['duration','Trip Duration'],['accommodation','Accommodation'],['travelers','No. of Travelers'],['interests','Interests'],['dietary','Dietary / Special']].map(([k,l])=>`
         <div class="tap-prog-row" data-key="${k}">
           <div class="tap-prog-dot" id="dot-${k}"></div>
           <span class="tap-prog-lbl">${l}</span>
@@ -1765,9 +1799,12 @@
   </div>
 </div>
 
-<!-- Back -->
-<div class="tap-back-bar">
+<!-- Navigation Bar -->
+<div class="tap-back-bar" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:26px 20px 0;">
   <button class="tap-back-btn" data-tab="trip-planner"><i class="fas fa-arrow-left"></i> Back to Trip Planner</button>
+  <button class="tap-packing-btn" id="tapPackingBtn" style="padding:10px 16px;border-radius:8px;border:1.5px solid #7c3aed;background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;font-size:.88rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:inherit;transition:all .2s;">
+    <i class="fas fa-suitcase-rolling"></i> Go to Packing
+  </button>
 </div>`;
     },
 
@@ -1778,6 +1815,37 @@
       document.getElementById('tapSaveBtn')?.addEventListener('click', () => this.saveItinerary());
       document.getElementById('tapPrintBtn')?.addEventListener('click', () => this.printItinerary());
       document.getElementById('tapShareBtn')?.addEventListener('click', () => this.shareItinerary());
+      document.getElementById('tapPackingBtn')?.addEventListener('click', () => this.goToPacking());
+    },
+
+    goToPacking() {
+      // Validate that itinerary has been generated
+      if (!this.prefs.duration || !this.trip.destination) {
+        if (typeof showToast === 'function') {
+          showToast('Please complete the itinerary first!', 'warning');
+        }
+        return;
+      }
+
+      // Store packing parameters from AI conversation
+      const packingData = {
+        destType: getPackingDestinationType(this.trip.destination),
+        duration: this.prefs.duration || 7,
+        travelers: this.prefs.travelers || 1,
+        destination: this.trip.destination
+      };
+      localStorage.setItem('globemate_packing_prefill', JSON.stringify(packingData));
+      
+      // Navigate to packing page
+      if (typeof PageLoader !== 'undefined') {
+        PageLoader.loadPage('packing');
+      } else {
+        // Fallback navigation
+        const packingSection = document.getElementById('packing');
+        if (packingSection) {
+          packingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
     },
 
     reset() {
@@ -1790,7 +1858,7 @@
       document.getElementById('tapCountdown').style.display = 'none';
       document.getElementById('tapItinCard').style.display  = 'none';
 
-      ['purpose','duration','budget','accommodation','interests','dietary'].forEach(k => {
+      ['purpose','duration','accommodation','travelers','interests','dietary'].forEach(k => {
         const v = document.getElementById(`val-${k}`);
         const d = document.getElementById(`dot-${k}`);
         if (v) v.textContent = '—';
