@@ -225,10 +225,10 @@ Firestore
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                          USER (Browser)                                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
-│  │  Click /  │  │  Type /  │  │  Map     │  │  Form    │  │  Page    │       │
-│  │  Navigate │  │  Search  │  │  Click   │  │  Submit  │  │  Load    │       │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+│  │  Click /  │  │  Type /  │  │  Map     │  │  Form    │  │  Page    │        │
+│  │  Navigate │  │  Search  │  │  Click   │  │  Submit  │  │  Load    │        │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘         │
 └───────┼──────────────┼──────────────┼──────────────┼──────────────┼───────────┘
         │              │              │              │              │
         ▾              ▾              ▾              ▾              ▾
@@ -269,17 +269,17 @@ Firestore
                       │  │ api.exchangerate-api.com/v4/       │  │
                       │  │ → currency.js                      │  │
                       │  ├────────────────────────────────────┤  │
-                      │  │ nominatim.openstreetmap.org         │  │
+                      │  │ nominatim.openstreetmap.org        │  │
                       │  │ → maps.js, trip-planner.js         │  │
                       │  ├────────────────────────────────────┤  │
-                      │  │ {s}.tile.openstreetmap.org          │  │
+                      │  │ {s}.tile.openstreetmap.org         │  │
                       │  │ → maps.js (Leaflet tile layer)     │  │
                       │  └────────────────────────────────────┘  │
                       └──────────────────────────────────────────┘
                                        │
                                        ▾
                       ┌──────────────────────────────────────────┐
-                      │           LOCAL STORAGE                   │
+                      │           LOCAL STORAGE                  │
                       │                                          │
                       │  Trip data, packing lists, documents,    │
                       │  currency cache, module state            │
@@ -320,7 +320,7 @@ Firestore
 User types "Japan"
        │
        ▾
-┌─────────────────────────────────────────────────────┐
+ ┌─────────────────────────────────────────────────────┐
 │  country-info.js                                     │
 │                                                      │
 │  handleSearch("jap")                                 │
@@ -352,7 +352,7 @@ User types "Japan"
 │       │                                              │
 │       └──► Visa checker ready for                    │
 │            user interaction                          │
-└─────────────────────────────────────────────────────┘
+ └─────────────────────────────────────────────────────┘
 ```
 
 ### Currency Conversion Data Flow
@@ -411,9 +411,9 @@ User types "Japan"
      │◄────────────────────┤                             │
      │                     │                             │
      │           ┌─────────┴──────────┐                  │
-     │           │ tile.openstreetmap │                   │
-     │           │ .org/{z}/{x}/{y}   │                   │
-     │           │ (map tile images)  │                   │
+     │           │ tile.openstreetmap │                  │
+     │           │ .org/{z}/{x}/{y}   │                  │
+     │           │ (map tile images)  │                  │
      │           └────────────────────┘                  │
 ```
 
