@@ -35,6 +35,450 @@ function loadFromLocal(key) {
   return data ? JSON.parse(data) : null;
 }
 
+const GlobeMateStore = (() => {
+  const KEYS = {
+    savedPlaces: 'globemate_saved_places_v1',
+    trips: 'globemateTrips',
+    itineraries: 'globemate_saved_itineraries',
+    aiTripId: 'globemate_ai_trip_id',
+    viewItinerary: 'globemate_view_itinerary'
+  };
+
+  const CLOUD_COLLECTION = 'user_saved_places';
+  let cloudPullInFlight = null;
+  let cloudPushTimer = null;
+  let cloudSyncedUserId = null;
+  let suspendCloudPush = false;
+
+  function safeParseArray(raw) {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function readArray(key) {
+    return safeParseArray(localStorage.getItem(key));
+  }
+
+  function writeArray(key, value) {
+    localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+  }
+
+  function nowIso() {
+    return new Date().toISOString();
+  }
+
+  function makeId(prefix = 'sp') {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function currentUserId() {
+    return (typeof Auth !== 'undefined' && Auth.currentUser && Auth.currentUser.uid) ? Auth.currentUser.uid : null;
+  }
+
+  function currentDB() {
+    return (typeof Auth !== 'undefined' && typeof Auth.getDB === 'function') ? Auth.getDB() : null;
+  }
+
+  function emitUpdated() {
+    window.dispatchEvent(new CustomEvent('globemate:saved-places-updated'));
+  }
+
+  function normalizeTrip(trip = {}) {
+    return {
+      ...trip,
+      id: Number(trip.id) || Date.now(),
+      createdAt: trip.createdAt || nowIso()
+    };
+  }
+
+  function normalizePlace(place = {}) {
+    const baseTrip = normalizeTrip(place.trip || {});
+    const hasItinerary = place.itinerary && (place.itinerary.html || place.itinerary.destination);
+
+    return {
+      id: place.id || makeId('sp'),
+      sourceTripId: Number(place.sourceTripId) || baseTrip.id,
+      destination: place.destination || baseTrip.destination || place.itinerary?.destination || 'Unknown destination',
+      createdAt: place.createdAt || baseTrip.createdAt || nowIso(),
+      updatedAt: place.updatedAt || place.createdAt || nowIso(),
+      trip: baseTrip,
+      itinerary: hasItinerary ? normalizeItinerary({
+        ...(place.itinerary || {}),
+        trip: place.itinerary?.trip || baseTrip,
+        destination: place.itinerary?.destination || place.destination || baseTrip.destination,
+        date: place.itinerary?.date || place.updatedAt || nowIso()
+      }) : null
+    };
+  }
+
+  function normalizeItinerary(entry = {}) {
+    const normalizedTrip = normalizeTrip(entry.trip || {});
+    return {
+      id: Number(entry.id) || Date.now(),
+      destination: entry.destination || normalizedTrip.destination || 'Unknown destination',
+      date: entry.date || nowIso(),
+      prefs: entry.prefs || {},
+      trip: normalizedTrip,
+      html: entry.html || ''
+    };
+  }
+
+  function placeFromTrip(trip) {
+    const normalizedTrip = normalizeTrip(trip);
+    const stamp = nowIso();
+    return {
+      id: makeId('trip'),
+      sourceTripId: normalizedTrip.id,
+      destination: normalizedTrip.destination || 'Unknown destination',
+      createdAt: normalizedTrip.createdAt || stamp,
+      updatedAt: stamp,
+      trip: normalizedTrip,
+      itinerary: null
+    };
+  }
+
+  function placeFromItinerary(itinerary) {
+    const normalized = normalizeItinerary(itinerary);
+    const stamp = normalized.date || nowIso();
+    return {
+      id: makeId('itin'),
+      sourceTripId: normalized.trip.id,
+      destination: normalized.destination,
+      createdAt: stamp,
+      updatedAt: stamp,
+      trip: normalized.trip,
+      itinerary: {
+        id: normalized.id,
+        destination: normalized.destination,
+        date: normalized.date,
+        prefs: normalized.prefs,
+        trip: normalized.trip,
+        html: normalized.html
+      }
+    };
+  }
+
+  function sortByRecent(items) {
+    return [...items].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+  }
+
+  function keyFromPlace(place) {
+    if (place && place.sourceTripId !== undefined && place.sourceTripId !== null) {
+      return `trip:${Number(place.sourceTripId)}`;
+    }
+    return `id:${place?.id || makeId('key')}`;
+  }
+
+  function mergePlaces(localPlaces = [], cloudPlaces = []) {
+    const map = new Map();
+
+    [...localPlaces, ...cloudPlaces]
+      .map(normalizePlace)
+      .forEach((place) => {
+        const key = keyFromPlace(place);
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, place);
+          return;
+        }
+
+        const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+        const incomingTime = new Date(place.updatedAt || place.createdAt || 0).getTime();
+        if (incomingTime >= existingTime) {
+          map.set(key, {
+            ...existing,
+            ...place,
+            itinerary: place.itinerary || existing.itinerary
+          });
+        }
+      });
+
+    return sortByRecent(Array.from(map.values()));
+  }
+
+  async function pushPlacesToCloud(places) {
+    const uid = currentUserId();
+    const db = currentDB();
+    if (!uid || !db) return;
+
+    await db.collection(CLOUD_COLLECTION).doc(uid).set({
+      uid,
+      places,
+      updatedAt: nowIso()
+    }, { merge: true });
+  }
+
+  function scheduleCloudPush(places) {
+    if (suspendCloudPush) return;
+    const uid = currentUserId();
+    if (!uid) return;
+
+    if (cloudPushTimer) clearTimeout(cloudPushTimer);
+    cloudPushTimer = setTimeout(() => {
+      pushPlacesToCloud(places).catch((error) => {
+        console.warn('Cloud sync push failed:', error);
+      });
+    }, 450);
+  }
+
+  async function syncFromCloud() {
+    const uid = currentUserId();
+    const db = currentDB();
+    if (!uid || !db) return migrateLegacyIfNeeded();
+    if (cloudPullInFlight) return cloudPullInFlight;
+
+    cloudPullInFlight = (async () => {
+      const snapshot = await db.collection(CLOUD_COLLECTION).doc(uid).get();
+      const cloudPlaces = (snapshot.exists && Array.isArray(snapshot.data()?.places))
+        ? snapshot.data().places
+        : [];
+      const localPlaces = migrateLegacyIfNeeded();
+      const merged = mergePlaces(localPlaces, cloudPlaces);
+
+      suspendCloudPush = true;
+      try {
+        savePlaces(merged);
+      } finally {
+        suspendCloudPush = false;
+      }
+
+      cloudSyncedUserId = uid;
+      return merged;
+    })();
+
+    try {
+      return await cloudPullInFlight;
+    } catch (error) {
+      console.warn('Cloud sync pull failed:', error);
+      return migrateLegacyIfNeeded();
+    } finally {
+      cloudPullInFlight = null;
+    }
+  }
+
+  function ensureCloudPull() {
+    const uid = currentUserId();
+    const db = currentDB();
+    if (!uid) {
+      cloudSyncedUserId = null;
+      return;
+    }
+    if (!db) return;
+    if (cloudSyncedUserId === uid || cloudPullInFlight) return;
+    syncFromCloud().catch((error) => {
+      console.warn('Cloud ensure pull failed:', error);
+    });
+  }
+
+  function syncLegacyFromPlaces(places) {
+    const trips = places
+      .filter(place => place && place.trip)
+      .map(place => normalizeTrip(place.trip));
+
+    const itineraries = places
+      .filter(place => place && place.itinerary && place.itinerary.html)
+      .map(place => normalizeItinerary(place.itinerary));
+
+    writeArray(KEYS.trips, trips);
+    writeArray(KEYS.itineraries, itineraries);
+  }
+
+  function savePlaces(places) {
+    const sorted = sortByRecent((places || []).map(normalizePlace));
+    writeArray(KEYS.savedPlaces, sorted);
+    syncLegacyFromPlaces(sorted);
+    emitUpdated();
+    scheduleCloudPush(sorted);
+    return sorted;
+  }
+
+  function migrateLegacyIfNeeded() {
+    const existing = readArray(KEYS.savedPlaces).map(normalizePlace);
+    if (existing.length) return sortByRecent(existing);
+
+    const tripPlaces = readArray(KEYS.trips).map(placeFromTrip);
+    const merged = [...tripPlaces];
+
+    readArray(KEYS.itineraries)
+      .map(normalizeItinerary)
+      .forEach((entry) => {
+        const index = merged.findIndex(place => Number(place.sourceTripId) === Number(entry.trip.id));
+        if (index >= 0) {
+          merged[index] = {
+            ...merged[index],
+            destination: entry.destination || merged[index].destination,
+            trip: normalizeTrip(entry.trip || merged[index].trip),
+            itinerary: {
+              id: entry.id,
+              destination: entry.destination,
+              date: entry.date,
+              prefs: entry.prefs,
+              trip: normalizeTrip(entry.trip),
+              html: entry.html
+            },
+            updatedAt: entry.date || merged[index].updatedAt
+          };
+        } else {
+          merged.push(placeFromItinerary(entry));
+        }
+      });
+
+    return savePlaces(merged);
+  }
+
+  function getSavedPlaces() {
+    const places = migrateLegacyIfNeeded();
+    ensureCloudPull();
+    return places;
+  }
+
+  function getTrips() {
+    return getSavedPlaces()
+      .filter(place => place.trip)
+      .map(place => normalizeTrip(place.trip));
+  }
+
+  function getItineraries() {
+    return getSavedPlaces()
+      .filter(place => place.itinerary && place.itinerary.html)
+      .map(place => normalizeItinerary(place.itinerary));
+  }
+
+  function saveTrip(trip) {
+    const normalizedTrip = normalizeTrip(trip);
+    const all = getSavedPlaces();
+    const existingIndex = all.findIndex(place => Number(place.sourceTripId) === Number(normalizedTrip.id));
+    const stamp = nowIso();
+
+    if (existingIndex >= 0) {
+      const existing = all[existingIndex];
+      all[existingIndex] = {
+        ...existing,
+        sourceTripId: normalizedTrip.id,
+        destination: normalizedTrip.destination || existing.destination,
+        trip: normalizedTrip,
+        updatedAt: stamp
+      };
+    } else {
+      all.unshift({
+        id: makeId('trip'),
+        sourceTripId: normalizedTrip.id,
+        destination: normalizedTrip.destination || 'Unknown destination',
+        createdAt: normalizedTrip.createdAt || stamp,
+        updatedAt: stamp,
+        trip: normalizedTrip,
+        itinerary: null
+      });
+    }
+
+    savePlaces(all);
+    return normalizedTrip;
+  }
+
+  function saveItinerary(payload = {}) {
+    const normalizedTrip = normalizeTrip(payload.trip || {});
+    const stamp = nowIso();
+    const itinerary = normalizeItinerary({
+      id: payload.id || Date.now(),
+      destination: payload.destination || normalizedTrip.destination,
+      date: payload.date || stamp,
+      prefs: payload.prefs || {},
+      trip: normalizedTrip,
+      html: payload.html || ''
+    });
+
+    const all = getSavedPlaces();
+    const existingIndex = all.findIndex(place => Number(place.sourceTripId) === Number(normalizedTrip.id));
+
+    if (existingIndex >= 0) {
+      const existing = all[existingIndex];
+      all[existingIndex] = {
+        ...existing,
+        sourceTripId: normalizedTrip.id,
+        destination: itinerary.destination || existing.destination,
+        trip: normalizedTrip,
+        itinerary,
+        updatedAt: itinerary.date || stamp
+      };
+    } else {
+      all.unshift({
+        id: makeId('itin'),
+        sourceTripId: normalizedTrip.id,
+        destination: itinerary.destination,
+        createdAt: itinerary.date || stamp,
+        updatedAt: itinerary.date || stamp,
+        trip: normalizedTrip,
+        itinerary
+      });
+    }
+
+    savePlaces(all);
+    return itinerary;
+  }
+
+  function deleteSavedPlace(placeId) {
+    const all = getSavedPlaces().filter(place => place.id !== placeId);
+    savePlaces(all);
+  }
+
+  function deleteTrip(tripId) {
+    const all = getSavedPlaces().filter(place => Number(place.sourceTripId) !== Number(tripId));
+    savePlaces(all);
+  }
+
+  function setCurrentTripId(tripId) {
+    localStorage.setItem(KEYS.aiTripId, String(tripId));
+  }
+
+  function getCurrentTripId() {
+    const value = parseInt(localStorage.getItem(KEYS.aiTripId), 10);
+    return Number.isNaN(value) ? null : value;
+  }
+
+  function setViewedItinerary(itinerary) {
+    localStorage.setItem(KEYS.viewItinerary, JSON.stringify(itinerary || null));
+  }
+
+  function consumeViewedItinerary() {
+    const raw = localStorage.getItem(KEYS.viewItinerary);
+    localStorage.removeItem(KEYS.viewItinerary);
+    if (!raw || raw === 'null') return null;
+    try {
+      return JSON.parse(raw);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function syncToCloud() {
+    const places = getSavedPlaces();
+    await pushPlacesToCloud(places);
+    return places;
+  }
+
+  return {
+    keys: KEYS,
+    getSavedPlaces,
+    getTrips,
+    getItineraries,
+    saveTrip,
+    saveItinerary,
+    deleteSavedPlace,
+    deleteTrip,
+    setCurrentTripId,
+    getCurrentTripId,
+    setViewedItinerary,
+    consumeViewedItinerary,
+    syncFromCloud,
+    syncToCloud
+  };
+})();
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString('en-US', { 
@@ -205,6 +649,7 @@ window.AppUtils = {
   showToast,
   saveToLocal,
   loadFromLocal,
+  GlobeMateStore,
   formatDate,
   formatNumber,
   debounce,
@@ -227,6 +672,7 @@ window.$$ = $$;
 window.showToast = showToast;
 window.saveToLocal = saveToLocal;
 window.loadFromLocal = loadFromLocal;
+window.GlobeMateStore = GlobeMateStore;
 window.formatDate = formatDate;
 window.formatNumber = formatNumber;
 window.debounce = debounce;

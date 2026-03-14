@@ -85,9 +85,9 @@ const MapExplorer = (() => {
       name;
     
     popupContent += `
-        <button onclick="MapExplorer.savePlace(${lat}, ${lng}, '${displayName.replace(/'/g, "\\'")}', ${JSON.stringify(locationDetails).replace(/'/g, "\\'").replace(/"/g, '&quot;')})"
+        <button onclick="MapExplorer.setAsDestination(${lat}, ${lng}, '${displayName.replace(/'/g, "\\'")}')"
           style="margin-top:10px;padding:6px 14px;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;">
-          <i class="fas fa-star"></i> Save Place
+          <i class="fas fa-location-dot"></i> Set as Destination
         </button>
       </div>
     `;
@@ -224,21 +224,75 @@ const MapExplorer = (() => {
     showToast('All markers cleared');
   }
 
-  function savePlace(lat, lng, name, locationDetails = null) {
-    if (savedPlaces.find(p => Math.abs(p.lat - lat) < 0.0001 && Math.abs(p.lng - lng) < 0.0001)) {
-      showToast('Place already saved', 'warning');
-      return;
+  async function fetchCountryMetadata(countryName) {
+    if (!countryName) return null;
+
+    try {
+      const fields = 'name,capital,region,flags,cca3';
+      const fullTextResp = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(countryName)}?fullText=true&fields=${fields}`);
+      if (fullTextResp.ok) {
+        const fullData = await fullTextResp.json();
+        if (Array.isArray(fullData) && fullData.length) return fullData[0];
+      }
+    } catch (_e) {}
+
+    try {
+      const fields = 'name,capital,region,flags,cca3';
+      const resp = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(countryName)}?fields=${fields}`);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (!Array.isArray(data) || !data.length) return null;
+
+      const exact = data.find(c => c.name?.common?.toLowerCase() === countryName.toLowerCase());
+      return exact || data[0];
+    } catch (_e) {
+      return null;
     }
-    savedPlaces.push({ 
-      lat, 
-      lng, 
-      name, 
-      locationDetails,
-      id: Date.now() 
-    });
-    saveToLocal('savedPlaces', savedPlaces);
-    renderSavedPlaces();
-    showToast(`${name} saved successfully!`);
+  }
+
+  async function setAsDestination(lat, lng, fallbackName = 'Selected destination') {
+    try {
+      showToast('Setting destination...', 'success');
+
+      const locationDetails = await reverseGeocode(lat, lng);
+      const countryName = locationDetails?.country;
+      const cityName = locationDetails?.city || locationDetails?.name || '';
+
+      if (!countryName) {
+        showToast('Could not detect country for this location. Try another point.', 'error');
+        return;
+      }
+
+      const countryMeta = await fetchCountryMetadata(countryName);
+
+      const destination = {
+        name: countryMeta?.name?.common || countryName || fallbackName,
+        officialName: countryMeta?.name?.official || countryName || fallbackName,
+        flag: countryMeta?.flags?.svg || '',
+        capital: countryMeta?.capital?.[0] || cityName || '',
+        region: countryMeta?.region || '',
+        cca3: countryMeta?.cca3 || ''
+      };
+
+      localStorage.setItem('globemate_trip_destination', JSON.stringify(destination));
+      localStorage.setItem('globemate_trip_form_prefill', JSON.stringify({
+        hostCountry: destination.name,
+        currentCity: cityName
+      }));
+
+      showToast(`${destination.name} set as destination${cityName ? ` (${cityName})` : ''}!`, 'success');
+
+      if (typeof PageLoader !== 'undefined') {
+        PageLoader.loadPage('trip-planner');
+      }
+    } catch (error) {
+      console.error('Set destination error:', error);
+      showToast('Failed to set destination. Please try again.', 'error');
+    }
+  }
+
+  function savePlace(lat, lng, name, locationDetails = null) {
+    setAsDestination(lat, lng, name);
   }
 
   function renderSavedPlaces() {
@@ -246,7 +300,7 @@ const MapExplorer = (() => {
     if (!container) return;
     
     if (savedPlaces.length === 0) {
-      container.innerHTML = '<p class="text-muted text-sm" style="padding:8px;">Click on map to save places</p>';
+      container.innerHTML = '<p class="text-muted text-sm" style="padding:8px;">Click on map and set a destination</p>';
       return;
     }
 
@@ -288,7 +342,7 @@ const MapExplorer = (() => {
     }
   }
 
-  return { init, goToLocation, savePlace, deleteSavedPlace, cleanup, get _map() { return map; } };
+  return { init, goToLocation, savePlace, setAsDestination, deleteSavedPlace, cleanup, get _map() { return map; } };
 })();
 
 // Expose to global scope

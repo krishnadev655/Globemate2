@@ -214,6 +214,12 @@ const Auth = (() => {
       });
     }
 
+    if (window.GlobeMateStore && typeof window.GlobeMateStore.syncFromCloud === 'function') {
+      window.GlobeMateStore.syncFromCloud().catch((error) => {
+        console.warn('Saved places sync on login failed:', error);
+      });
+    }
+
     console.log('✅ Navbar updated — user:', userName);
   }
 

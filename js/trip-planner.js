@@ -164,14 +164,31 @@
     countries: [],
     passengerCount: 1,
     selectedAirport: null,
+    onStoreUpdated: null,
 
     init() {
       console.log('Trip Planner (new) initializing...');
       this.loadTrips();
       this.loadDestinationFromStorage();
       this.bindEvents();
+      this.applyFormPrefillFromStorage();
       this.renderSavedTrips();
       this.setMinDate();
+
+      if (this.onStoreUpdated) {
+        window.removeEventListener('globemate:saved-places-updated', this.onStoreUpdated);
+      }
+      this.onStoreUpdated = () => {
+        this.loadTrips();
+        this.renderSavedTrips();
+      };
+      window.addEventListener('globemate:saved-places-updated', this.onStoreUpdated);
+
+      if (typeof GlobeMateStore !== 'undefined' && typeof GlobeMateStore.syncFromCloud === 'function') {
+        GlobeMateStore.syncFromCloud().catch((error) => {
+          console.warn('Trip planner cloud sync failed:', error);
+        });
+      }
     },
 
     setMinDate() {
@@ -191,6 +208,24 @@
         } catch (e) {
           console.error('Error parsing stored destination:', e);
         }
+      }
+    },
+
+    applyFormPrefillFromStorage() {
+      const raw = localStorage.getItem('globemate_trip_form_prefill');
+      if (!raw) return;
+
+      try {
+        const prefill = JSON.parse(raw) || {};
+        const hostInput = document.getElementById('tripHostCountry');
+        const cityInput = document.getElementById('tripCurrentLocation');
+
+        if (hostInput && prefill.hostCountry) hostInput.value = prefill.hostCountry;
+        if (cityInput && prefill.currentCity) cityInput.value = prefill.currentCity;
+      } catch (error) {
+        console.warn('Trip prefill parse failed:', error);
+      } finally {
+        localStorage.removeItem('globemate_trip_form_prefill');
       }
     },
 
@@ -888,8 +923,13 @@
         createdAt: new Date().toISOString()
       };
 
-      this.trips.push(trip);
-      localStorage.setItem('globemateTrips', JSON.stringify(this.trips));
+      if (typeof GlobeMateStore !== 'undefined') {
+        GlobeMateStore.saveTrip(trip);
+        this.trips = GlobeMateStore.getTrips();
+      } else {
+        this.trips.push(trip);
+        localStorage.setItem('globemateTrips', JSON.stringify(this.trips));
+      }
       this.renderSavedTrips();
       if (typeof showToast === 'function') showToast('Trip saved successfully!', 'success');
     },
@@ -906,13 +946,18 @@
     },
 
     loadTrips() {
+      if (typeof GlobeMateStore !== 'undefined') {
+        this.trips = GlobeMateStore.getTrips();
+        return;
+      }
+
       const saved = localStorage.getItem('globemateTrips');
-      if (saved) {
-        try {
-          this.trips = JSON.parse(saved);
-        } catch(e) {
-          this.trips = [];
-        }
+      if (!saved) return;
+
+      try {
+        this.trips = JSON.parse(saved);
+      } catch(e) {
+        this.trips = [];
       }
     },
 
@@ -972,7 +1017,8 @@
         const handler = (e) => {
           if (e.target.closest('.saved-trip-actions')) return;
           const id = parseInt(item.dataset.tripId);
-          localStorage.setItem('globemate_ai_trip_id', id);
+          if (typeof GlobeMateStore !== 'undefined') GlobeMateStore.setCurrentTripId(id);
+          else localStorage.setItem('globemate_ai_trip_id', id);
           if (typeof PageLoader !== 'undefined') {
             PageLoader.loadPage('trip-ai-planner');
           }
@@ -1029,8 +1075,13 @@
     },
 
     deleteTrip(id) {
-      this.trips = this.trips.filter(t => t.id !== id);
-      localStorage.setItem('globemateTrips', JSON.stringify(this.trips));
+      if (typeof GlobeMateStore !== 'undefined') {
+        GlobeMateStore.deleteTrip(id);
+        this.trips = GlobeMateStore.getTrips();
+      } else {
+        this.trips = this.trips.filter(t => t.id !== id);
+        localStorage.setItem('globemateTrips', JSON.stringify(this.trips));
+      }
       this.renderSavedTrips();
       if (typeof showToast === 'function') showToast('Trip deleted.', 'success');
     },
@@ -1055,6 +1106,10 @@
 
     cleanup() {
       this.currentFlights = null;
+      if (this.onStoreUpdated) {
+        window.removeEventListener('globemate:saved-places-updated', this.onStoreUpdated);
+      }
+      this.onStoreUpdated = null;
     }
   };
 

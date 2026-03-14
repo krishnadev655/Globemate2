@@ -1652,6 +1652,7 @@
     step: 0,
     chosen: [],
     generatedHTML: '',
+    pendingViewedItinerary: null,
     cdTimer: null,
 
     init() {
@@ -1660,14 +1661,30 @@
       const root = document.getElementById('trip-ai-planner-root');
       if (!root) return;
 
-      // Load trip
-      const id = parseInt(localStorage.getItem('globemate_ai_trip_id'));
-      const trips = JSON.parse(localStorage.getItem('globemateTrips') || '[]');
-      this.trip = trips.find(t => t.id === id) || trips[trips.length - 1] || {};
+      this.pendingViewedItinerary = (typeof GlobeMateStore !== 'undefined')
+        ? GlobeMateStore.consumeViewedItinerary()
+        : null;
+
+      if (this.pendingViewedItinerary?.trip) {
+        this.trip = this.pendingViewedItinerary.trip;
+      } else {
+        const id = (typeof GlobeMateStore !== 'undefined')
+          ? GlobeMateStore.getCurrentTripId()
+          : parseInt(localStorage.getItem('globemate_ai_trip_id'), 10);
+        const trips = (typeof GlobeMateStore !== 'undefined')
+          ? GlobeMateStore.getTrips()
+          : JSON.parse(localStorage.getItem('globemateTrips') || '[]');
+        this.trip = trips.find(t => t.id === id) || trips[trips.length - 1] || {};
+      }
 
       root.innerHTML = this.buildHTML();
       this.bindAll();
-      this.reset();
+
+      if (this.pendingViewedItinerary?.html) {
+        this.restoreSavedItinerary(this.pendingViewedItinerary);
+      } else {
+        this.reset();
+      }
     },
 
     buildHTML() {
@@ -1853,6 +1870,7 @@
       this.prefs  = {};
       this.step   = 0;
       this.chosen = [];
+      this.generatedHTML = '';
 
       document.getElementById('tapMsgs').innerHTML = '';
       document.getElementById('tapCountdown').style.display = 'none';
@@ -1866,6 +1884,43 @@
       });
 
       this.runStep(0);
+    },
+
+    restoreSavedItinerary(savedItinerary) {
+      clearInterval(this.cdTimer);
+      this.prefs = savedItinerary?.prefs || {};
+      this.generatedHTML = savedItinerary?.html || '';
+
+      const messages = document.getElementById('tapMsgs');
+      const countdown = document.getElementById('tapCountdown');
+      const chipsArea = document.getElementById('tapChipsArea');
+      const inputRow = document.getElementById('tapInputRow');
+      const body = document.getElementById('tapItinBody');
+      const card = document.getElementById('tapItinCard');
+      const title = document.getElementById('tapItinTitle');
+      const sub = document.getElementById('tapItinSub');
+
+      if (messages) messages.innerHTML = '';
+      if (countdown) countdown.style.display = 'none';
+      if (chipsArea) chipsArea.style.display = 'none';
+      if (inputRow) inputRow.style.display = 'none';
+
+      ['purpose','duration','accommodation','travelers','interests','dietary'].forEach((key) => {
+        const valueEl = document.getElementById(`val-${key}`);
+        const dotEl = document.getElementById(`dot-${key}`);
+        const value = this.prefs[key];
+        if (valueEl) {
+          valueEl.textContent = Array.isArray(value) ? value.join(', ') : (value || '—');
+        }
+        if (dotEl && value) dotEl.classList.add('done');
+      });
+
+      if (title) title.textContent = `${this.prefs.duration || 5}-Day ${this.trip.destination || 'Trip'} Itinerary`;
+      if (sub) sub.textContent = `Personalised for ${this.prefs.purpose || 'your trip'} · GlobeMate AI`;
+      if (body) body.innerHTML = this.generatedHTML;
+      if (card) card.style.display = this.generatedHTML ? 'block' : 'none';
+
+      this.addMsg('ai', `✅ Loaded your saved itinerary for <strong>${this.trip.destination || 'your destination'}</strong>. Click <strong>Restart</strong> if you want to regenerate it.`);
     },
 
     runStep(idx) {
@@ -2005,7 +2060,6 @@
 
     /* ── Save ── */
     saveItinerary() {
-      const saved = JSON.parse(localStorage.getItem('globemate_saved_itineraries') || '[]');
       const entry = {
         id: Date.now(),
         destination: this.trip.destination || 'Unknown',
@@ -2014,8 +2068,15 @@
         trip: this.trip,
         html: this.generatedHTML
       };
-      saved.unshift(entry);
-      localStorage.setItem('globemate_saved_itineraries', JSON.stringify(saved));
+
+      if (typeof GlobeMateStore !== 'undefined') {
+        GlobeMateStore.saveItinerary(entry);
+      } else {
+        const saved = JSON.parse(localStorage.getItem('globemate_saved_itineraries') || '[]');
+        saved.unshift(entry);
+        localStorage.setItem('globemate_saved_itineraries', JSON.stringify(saved));
+      }
+
       const btn = document.getElementById('tapSaveBtn');
       if (btn) {
         btn.innerHTML = '<i class="fas fa-check"></i> Saved!';
