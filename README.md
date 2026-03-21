@@ -1,6 +1,39 @@
 # GlobeMate Project Architecture
 
-This document provides an overview of the GlobeMate application's workflow, technical methodologies, and API integrations.
+This document provides an overview of GlobeMate workflow, methodologies, API integrations, and the production Vercel configuration.
+
+## 0. Deployment Mode (Current)
+
+This repository is configured for Vercel-first hosting.
+
+- Runtime config source: Vercel Environment Variables
+- Runtime injection endpoint: `/api/config` via `api/config.js`
+- Client bootstrap order in `index.html`:
+  - `js/config.js` (safe defaults)
+  - `/api/config` (injects real runtime keys)
+  - App modules (`js/auth.js`, `js/app.js`, etc.)
+
+The project no longer depends on local secret files.
+
+### Required Vercel Environment Variables
+
+- `PUBLIC_FIREBASE_API_KEY`
+- `PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `PUBLIC_FIREBASE_PROJECT_ID`
+- `PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `PUBLIC_FIREBASE_APP_ID`
+- `PUBLIC_FIREBASE_MEASUREMENT_ID`
+- `PUBLIC_TOMORROW_IO_API_KEY`
+- `PUBLIC_GROK_API_KEY`
+- `PUBLIC_GROQ_API_KEY`
+
+### Firebase Console Requirement
+
+Add your Vercel domain in Firebase:
+
+- Firebase Console -> Authentication -> Settings -> Authorized domains
+- Add: `your-project.vercel.app` (and custom domain, if any)
 
 ## 1. Project Workflow
 
@@ -52,7 +85,7 @@ The project is built with a focus on modern, framework-less web technologies, em
     -   **Authentication**: Manages user sign-up, login (Email/Password, Google OAuth), and session persistence.
     -   **Cloud Firestore**: A NoSQL database used to store user profiles and sync saved places/trips across devices.
 
--   **API Integration**: The application is a rich client that orchestrates calls to numerous third-party APIs. Each integration is isolated within its relevant module. API keys and sensitive configurations are managed separately in `config.local.js` (which is git-ignored) to keep them out of source control.
+-   **API Integration**: The application is a rich client that orchestrates calls to third-party APIs. Each integration is isolated within its relevant module. In production, API keys are supplied from Vercel environment variables through the `/api/config` runtime endpoint.
 
 -   **AI Integration**: **Large Language Models (LLMs)** are used to provide intelligent features:
     -   **xAI Grok**: Generates structured travel itineraries based on user input.
