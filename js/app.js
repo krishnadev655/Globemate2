@@ -764,14 +764,47 @@ function initNavbar() {
 
   // Mobile menu toggle
   if (navToggle && navLinks) {
+    const closeMobileMenu = () => {
+      navLinks.classList.remove('show');
+      navToggle.setAttribute('aria-expanded', 'false');
+    };
+
+    const setExpandedState = () => {
+      navToggle.setAttribute('aria-expanded', navLinks.classList.contains('show') ? 'true' : 'false');
+    };
+
+    if (window.innerWidth <= 768) {
+      closeMobileMenu();
+    } else {
+      setExpandedState();
+    }
+
     navToggle.addEventListener('click', () => {
       navLinks.classList.toggle('show');
+      setExpandedState();
     });
 
     // Close mobile menu when clicking nav links
     navLinks.addEventListener('click', (e) => {
       if (e.target.closest('.nav-tab-link')) {
+        closeMobileMenu();
+      }
+    });
+
+    // Close menu when tapping outside in mobile view.
+    document.addEventListener('click', (e) => {
+      if (window.innerWidth > 768) return;
+      if (!navLinks.classList.contains('show')) return;
+      const clickedInsideMenu = navLinks.contains(e.target) || navToggle.contains(e.target);
+      if (!clickedInsideMenu) {
+        closeMobileMenu();
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) {
         navLinks.classList.remove('show');
+        navToggle.setAttribute('aria-expanded', 'false');
       }
     });
   }

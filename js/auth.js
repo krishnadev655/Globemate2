@@ -173,7 +173,8 @@ const Auth = (() => {
     // Show nav links and mobile toggle
     const navLinksEl = document.getElementById('navLinks');
     const navToggleEl = document.getElementById('navToggle');
-    if (navLinksEl) navLinksEl.style.display = 'flex';
+    // Let CSS control desktop vs mobile nav layout; avoid forcing menu open on phones.
+    if (navLinksEl) navLinksEl.style.display = '';
     if (navToggleEl) navToggleEl.style.display = '';
 
     // Replace GlobeMate logo text with user name

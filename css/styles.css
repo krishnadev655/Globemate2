@@ -7026,6 +7026,92 @@ select:focus-visible, textarea:focus-visible {
     background: #f8fbff !important;
   }
 
+  /* ---- Mobile navbar behavior lock ---- */
+  .nav-container {
+    height: 64px !important;
+    padding: 0 14px !important;
+  }
+
+  .nav-logo {
+    font-size: 2rem !important;
+    gap: 8px !important;
+  }
+
+  .nav-logo i {
+    font-size: 2rem !important;
+  }
+
+  .nav-toggle {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+  }
+
+  .nav-links {
+    display: none !important;
+    position: fixed !important;
+    top: 64px !important;
+    right: 0 !important;
+    left: auto !important;
+    width: min(86vw, 340px) !important;
+    max-height: calc(100dvh - 64px) !important;
+    overflow-y: auto !important;
+    background: #ffffff !important;
+    border-left: 1px solid #e5e7eb !important;
+    border-bottom-left-radius: 14px !important;
+    box-shadow: 0 14px 40px rgba(15, 23, 42, 0.16) !important;
+    padding: 14px !important;
+    z-index: 1200 !important;
+  }
+
+  .nav-links.show {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+  }
+
+  .nav-links li {
+    width: 100%;
+  }
+
+  .nav-links a {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    padding: 11px 12px !important;
+    font-size: 1.02rem !important;
+    border-radius: 10px !important;
+  }
+
+  /* ---- Phone-friendly page flow ---- */
+  #content-container {
+    overflow-x: hidden;
+  }
+
+  .section {
+    padding: 84px 0 38px !important;
+    max-height: calc(100dvh - 64px) !important;
+  }
+
+  .section.tab-section.active-tab {
+    height: calc(100dvh - 64px) !important;
+    margin-top: 64px !important;
+  }
+
+  .section .container {
+    padding: 0 14px !important;
+  }
+
+  .card,
+  .country-card,
+  .weather-card,
+  .trip-form-card,
+  .itinerary-card {
+    border-radius: 14px !important;
+  }
+
   #safety .search-bar .btn {
     width: 100% !important;
     justify-content: center !important;

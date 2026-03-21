@@ -10,6 +10,7 @@
     formPrefill: null,
     liveRefreshTimer: null,
     latestSnapshot: null,
+    insightRequestToken: 0,
 
     init() {
       this.cleanup();
@@ -37,6 +38,7 @@
     async render() {
       const root = document.getElementById('weatherInfoRoot');
       if (!root) return;
+      const renderToken = ++this.insightRequestToken;
 
       if (!this.destination?.name) {
         this.latestSnapshot = null;
@@ -69,6 +71,9 @@
         root.innerHTML = this.buildDashboard(geo, forecast, climate, airQuality);
         this.bindActions();
         this.scheduleLiveRefresh();
+        this.enhanceTravelInsightsWithGrok(this.latestSnapshot, renderToken).catch((error) => {
+          console.warn('Grok travel insights enrichment failed:', error);
+        });
       } catch (error) {
         this.latestSnapshot = null;
         console.error('Weather page error:', error);
@@ -355,8 +360,28 @@
 
     getAiProviderConfig() {
       return {
+        grokKey: (window.GROK_API_KEY || '').trim(),
         groqKey: (window.GROQ_API_KEY || '').trim()
       };
+    },
+
+    parseLooseJson(text) {
+      if (!text || typeof text !== 'string') return null;
+
+      const cleaned = text.trim();
+      try {
+        return JSON.parse(cleaned);
+      } catch (_err) {
+        const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+        if (fenced?.[1]) {
+          try {
+            return JSON.parse(fenced[1]);
+          } catch (_innerErr) {
+            return null;
+          }
+        }
+        return null;
+      }
     },
 
     parseChatCompletionsText(data) {
@@ -445,6 +470,122 @@
       const parsed = this.parseChatCompletionsText(data);
       if (parsed) return parsed;
       throw new Error('Groq response had no text output.');
+    },
+
+    buildInsightGenerationContext(snapshot) {
+      const geo = snapshot?.geo || {};
+      const forecast = snapshot?.forecast || {};
+      const climate = snapshot?.climate || {};
+      const current = forecast.current || {};
+      const daily = forecast.daily || {};
+      const air = snapshot?.airQuality?.current || {};
+
+      return {
+        destination: this.destination?.name || geo.country || 'Destination',
+        city: geo.city || null,
+        now: {
+          condition: this.weatherLabel(current.weather_code),
+          temperatureC: current.temperature_2m,
+          feelsLikeC: current.apparent_temperature,
+          humidityPct: current.relative_humidity_2m,
+          windKmh: current.wind_speed_10m,
+          aqi: air.us_aqi,
+          pm25: air.pm2_5
+        },
+        next7Days: (daily.time || []).slice(0, 7).map((time, idx) => ({
+          day: new Date(time).toLocaleDateString('en-US', { weekday: 'short' }),
+          highC: daily.temperature_2m_max?.[idx],
+          lowC: daily.temperature_2m_min?.[idx],
+          rainChancePct: daily.precipitation_probability_max?.[idx],
+          windKmh: daily.wind_speed_10m_max?.[idx]
+        })),
+        monthlyClimate: climate?.monthly?.time?.length
+          ? {
+            months: climate.monthly.time,
+            tempAvgC: climate.monthly.temperature_2m_mean,
+            rainMm: climate.monthly.precipitation_sum,
+            windKmh: climate.monthly.wind_speed_10m_mean
+          }
+          : null
+      };
+    },
+
+    async askGrokTravelInsights(snapshot) {
+      const { grokKey } = this.getAiProviderConfig();
+      if (!grokKey) return null;
+
+      const context = this.buildInsightGenerationContext(snapshot);
+      const systemPrompt = [
+        'You are a travel weather analyst for GlobeMate.',
+        'Write concise, practical weather insights for travelers.',
+        'Return STRICT JSON only with no markdown or extra text.',
+        'Avoid saying data is unavailable; if missing monthly climate, use forecast-based guidance.',
+        'Each text must be under 45 words and each meta under 7 words.',
+        'JSON shape:',
+        '{"bestTime":{"text":"","meta":""},"climatePattern":{"text":"","meta":""},"windComfort":{"text":"","meta":""},"airComfort":{"text":"","meta":""},"monthFallback":{"title":"","text":""}}'
+      ].join(' ');
+
+      const userPrompt = `Context JSON: ${JSON.stringify(context)}`;
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${grokKey}`
+        },
+        body: JSON.stringify({
+          model: 'grok-2-latest',
+          temperature: 0.3,
+          max_tokens: 420,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(`Grok request failed: ${response.status} ${detail}`);
+      }
+
+      const data = await response.json();
+      const content = this.parseChatCompletionsText(data);
+      const parsed = this.parseLooseJson(content);
+      if (!parsed) throw new Error('Grok response was not valid JSON.');
+      return parsed;
+    },
+
+    async enhanceTravelInsightsWithGrok(snapshot, renderToken) {
+      const root = document.getElementById('weatherInfoRoot');
+      if (!root) return;
+
+      const aiInsights = await this.askGrokTravelInsights(snapshot);
+      if (!aiInsights) return;
+      if (renderToken !== this.insightRequestToken) return;
+
+      const updateInsightCard = (key, data) => {
+        if (!data || typeof data !== 'object') return;
+        const card = root.querySelector(`[data-insight-key="${key}"]`);
+        if (!card) return;
+        const textNode = card.querySelector('.weather-insight-text');
+        const metaNode = card.querySelector('.weather-insight-meta');
+        if (textNode && data.text) textNode.textContent = String(data.text).trim();
+        if (metaNode && data.meta) metaNode.innerHTML = `<i class="fas fa-sparkles"></i> ${this.escapeHtml(String(data.meta).trim())}`;
+      };
+
+      updateInsightCard('bestTime', aiInsights.bestTime);
+      updateInsightCard('climatePattern', aiInsights.climatePattern);
+      updateInsightCard('windComfort', aiInsights.windComfort);
+      updateInsightCard('airComfort', aiInsights.airComfort);
+
+      const monthFallbackTitle = root.querySelector('[data-month-fallback-title]');
+      const monthFallbackText = root.querySelector('[data-month-fallback-text]');
+      if (monthFallbackTitle && aiInsights.monthFallback?.title) {
+        monthFallbackTitle.textContent = String(aiInsights.monthFallback.title).trim();
+      }
+      if (monthFallbackText && aiInsights.monthFallback?.text) {
+        monthFallbackText.textContent = String(aiInsights.monthFallback.text).trim();
+      }
     },
 
     buildWeatherAiWidget() {
@@ -940,6 +1081,73 @@
       return summary;
     },
 
+    buildForecastOnlyBestTime(forecast) {
+      const daily = forecast?.daily || {};
+      const times = daily.time || [];
+      const highs = daily.temperature_2m_max || [];
+      const rain = daily.precipitation_probability_max || [];
+      const wind = daily.wind_speed_10m_max || [];
+      if (!times.length) {
+        return 'Near-term weather is currently steady enough for flexible trip timing and standard sightseeing plans.';
+      }
+
+      const scored = times.slice(0, 7).map((time, index) => {
+        const high = Number(highs[index] ?? 24);
+        const rainChance = Number(rain[index] ?? 0);
+        const windKmh = Number(wind[index] ?? 0);
+        const score = 100 - Math.abs(high - 24) * 2 - rainChance * 0.35 - Math.max(windKmh - 18, 0) * 1.5;
+        return {
+          label: new Date(time).toLocaleDateString('en-US', { weekday: 'short' }),
+          high,
+          rainChance,
+          windKmh,
+          score
+        };
+      }).sort((a, b) => b.score - a.score);
+
+      const best = scored[0];
+      return `${best.label} looks most comfortable in the next week, with around ${Math.round(best.high)}°C, rain near ${Math.round(best.rainChance)}%, and wind around ${Math.round(best.windKmh)} km/h.`;
+    },
+
+    buildForecastOnlyClimateText(forecast) {
+      const daily = forecast?.daily || {};
+      const highs = (daily.temperature_2m_max || []).slice(0, 7).map((value) => Number(value ?? 0));
+      const lows = (daily.temperature_2m_min || []).slice(0, 7).map((value) => Number(value ?? 0));
+      const rain = (daily.precipitation_probability_max || []).slice(0, 7).map((value) => Number(value ?? 0));
+      if (!highs.length || !lows.length) {
+        return 'The coming days indicate a stable outlook suitable for routine city movement and outdoor stops.';
+      }
+
+      const maxHigh = Math.max(...highs);
+      const minLow = Math.min(...lows);
+      const avgRain = rain.length ? rain.reduce((sum, value) => sum + value, 0) / rain.length : 0;
+      return `The 7-day outlook ranges from ${Math.round(minLow)}°C to ${Math.round(maxHigh)}°C, with average rain chance near ${Math.round(avgRain)}%, giving a practical short-term climate signal for planning.`;
+    },
+
+    buildForecastMonthFallback(forecast) {
+      const daily = forecast?.daily || {};
+      const times = daily.time || [];
+      const highs = daily.temperature_2m_max || [];
+      const lows = daily.temperature_2m_min || [];
+      const rain = daily.precipitation_probability_max || [];
+      const wind = daily.wind_speed_10m_max || [];
+      if (!times.length) {
+        return {
+          title: 'Live climate signal',
+          text: 'Short-range weather indicators are active, so you can continue planning dates and activities confidently.'
+        };
+      }
+
+      const maxHigh = Math.max(...highs.slice(0, 7).map((value) => Number(value ?? 0)));
+      const minLow = Math.min(...lows.slice(0, 7).map((value) => Number(value ?? 0)));
+      const peakRain = Math.max(...rain.slice(0, 7).map((value) => Number(value ?? 0)));
+      const peakWind = Math.max(...wind.slice(0, 7).map((value) => Number(value ?? 0)));
+      return {
+        title: 'Next 7-day climate signal',
+        text: `Expect temperatures between ${Math.round(minLow)}°C and ${Math.round(maxHigh)}°C, with rain risk peaking near ${Math.round(peakRain)}% and wind up to ${Math.round(peakWind)} km/h.`
+      };
+    },
+
     buildTravelInsights({ climate, todayWind, aqi, pm25, humidity, forecast }) {
       const detailed = this.deriveBestMonthsDetailed(climate);
       const months = climate?.monthly?.time || [];
@@ -958,11 +1166,11 @@
 
       const bestTimeText = top.length
         ? `${top.map(item => item.monthName).join(', ')} stand out most, with comfort scores between ${top[top.length - 1].comfort} and ${top[0].comfort}/100. These months combine temperatures around ${Math.round(top[0].temp)}°C, lower rainfall pressure, and manageable wind.`
-        : `Long-range monthly climate normals are not available right now, so a precise best-season recommendation can't be calculated yet from historical data.`;
+        : this.buildForecastOnlyBestTime(forecast);
 
       const climateText = months.length
         ? `Average yearly temperature is about ${Math.round(avgTemp)}°C. ${hottestIndex >= 0 ? `${this.monthName(months[hottestIndex])} is typically the warmest month at ${Math.round(temps[hottestIndex])}°C.` : ''} ${coolestIndex >= 0 ? `${this.monthName(months[coolestIndex])} is usually the coolest at ${Math.round(temps[coolestIndex])}°C.` : ''} ${wettestIndex >= 0 ? `${this.monthName(months[wettestIndex])} is the wettest, averaging ${Math.round(rain[wettestIndex])} mm of rainfall.` : ''}`
-        : `Historical monthly climate data is not available for this location at the moment, so the page is relying on live forecast signals instead of long-range averages.`;
+        : this.buildForecastOnlyClimateText(forecast);
 
       const windText = months.length
         ? `Current peak wind is around ${Math.round(todayWind || 0)} km/h. Across the year, average wind runs near ${Math.round(avgWind || 0)} km/h, with ${windiestIndex >= 0 ? `${this.monthName(months[windiestIndex])} usually being the windiest month at about ${Math.round(wind[windiestIndex])} km/h.` : 'some seasonal fluctuation.'} ${Math.round(todayWind || 0) > Math.round((avgWind || 0) + 6) ? 'Today is windier than the usual monthly average.' : 'Today is close to normal for this destination.'}`
@@ -970,28 +1178,29 @@
 
       const airText = aqi !== undefined && aqi !== null
         ? `Current air quality is ${this.aqiLabel(aqi).toLowerCase()} at AQI ${Math.round(aqi)}${pm25 ? `, with PM2.5 near ${Math.round(pm25)} µg/m³` : ''}. ${humidity !== undefined && humidity !== null ? `Humidity is ${Math.round(humidity)}%, so the air may feel ${humidity > 75 ? 'heavier and more humid' : humidity < 35 ? 'drier than average' : 'fairly balanced'} during outdoor activity.` : ''} ${todayRain > 55 ? 'Rain chances may temporarily improve air freshness later in the day.' : ''}`
-        : `Air-quality monitoring is not available right now, so this card is limited to humidity and short-term comfort context.`;
+        : `Humidity sits near ${Math.round(humidity || 0)}%, and rain chance is ${Math.round(todayRain || 0)}% today, so comfort is better judged by moisture, breeze and rainfall timing during outdoor plans.`;
 
       return [
-        { title: 'Best time to visit', icon: 'calendar-check', text: bestTimeText, meta: top.length ? `${top[0].monthName} rated highest` : 'Climate history limited' },
-        { title: 'Climate pattern', icon: 'chart-simple', text: climateText, meta: avgTemp !== null ? `Year avg ${Math.round(avgTemp)}°C` : 'Forecast-based view' },
-        { title: 'Wind & outdoor comfort', icon: 'wind', text: windText, meta: `${Math.round(todayWind || 0)} km/h today` },
-        { title: 'Air quality & comfort', icon: 'lungs', text: airText, meta: aqi !== undefined && aqi !== null ? `${Math.round(aqi)} AQI` : 'No live AQI feed' }
+        { key: 'bestTime', title: 'Best time to visit', icon: 'calendar-check', text: bestTimeText, meta: top.length ? `${top[0].monthName} rated highest` : 'Next-week comfort pick' },
+        { key: 'climatePattern', title: 'Climate pattern', icon: 'chart-simple', text: climateText, meta: avgTemp !== null ? `Year avg ${Math.round(avgTemp)}°C` : 'Live outlook mode' },
+        { key: 'windComfort', title: 'Wind & outdoor comfort', icon: 'wind', text: windText, meta: `${Math.round(todayWind || 0)} km/h today` },
+        { key: 'airComfort', title: 'Air quality & comfort', icon: 'lungs', text: airText, meta: aqi !== undefined && aqi !== null ? `${Math.round(aqi)} AQI` : 'Humidity-led comfort' }
       ];
     },
 
-    buildMonthCards(climate) {
+    buildMonthCards(climate, forecast) {
       const months = climate?.monthly?.time || [];
       const temps = climate?.monthly?.temperature_2m_mean || [];
       const rain = climate?.monthly?.precipitation_sum || [];
       const wind = climate?.monthly?.wind_speed_10m_mean || [];
 
       if (!months.length) {
+        const fallback = this.buildForecastMonthFallback(forecast);
         return `
           <div class="weather-month-card" style="grid-column:1/-1;">
             <span class="weather-month-label">Climate data</span>
-            <h4>Monthly climate normals unavailable</h4>
-            <p>Live weather, wind, sunrise and short-term conditions are still available above. You can continue to Trip Planner normally.</p>
+            <h4 data-month-fallback-title>${fallback.title}</h4>
+            <p data-month-fallback-text>${fallback.text}</p>
           </div>
         `;
       }
@@ -1172,10 +1381,10 @@
             <div class="weather-section-title"><i class="fas fa-lightbulb"></i> Travel insights</div>
             <div class="weather-insight-grid">
               ${travelInsights.map((item) => `
-                <div class="weather-insight-card">
+                <div class="weather-insight-card" data-insight-key="${item.key}">
                   <div class="weather-insight-icon"><i class="fas fa-${item.icon}"></i></div>
                   <h4>${item.title}</h4>
-                  <p>${item.text}</p>
+                  <p class="weather-insight-text">${item.text}</p>
                   <div class="weather-insight-meta"><i class="fas fa-sparkles"></i> ${item.meta}</div>
                 </div>
               `).join('')}
@@ -1185,7 +1394,7 @@
           <div>
             <div class="weather-section-title"><i class="fas fa-calendar-days"></i> 12-month climate view</div>
             <div class="weather-month-grid">
-              ${this.buildMonthCards(climate)}
+              ${this.buildMonthCards(climate, forecast)}
             </div>
             ${this.buildHeatmap(climate)}
           </div>

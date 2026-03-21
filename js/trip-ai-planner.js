@@ -583,6 +583,13 @@
       places:['Burj Khalifa','Dubai Mall','Sheikh Zayed Mosque','Palm Jumeirah','Desert Safari','Burj Al Arab','Old Dubai Souks','Ferrari World Abu Dhabi'],
       food:['Shawarma','Hummus & Flatbread','Lamb Machboos','Al Harees','Luqaimat','Camel Milk Chocolate','Kunafa','Mixed Grill'],
     },
+    india: {
+      currency:'INR (Indian Rupee)', visa:'e-Visa / visa policy by nationality', language:'Hindi / English + regional languages',
+      tz:'IST (UTC+5:30)', plug:'Type C/D/M', sos:'112',
+      best:'October–March',
+      places:['Taj Mahal (Agra)','Agra Fort','India Gate (Delhi)','Qutub Minar (Delhi)','Red Fort (Delhi)','Humayun\'s Tomb (Delhi)','Amber Fort (Jaipur)','Hawa Mahal (Jaipur)','Varanasi Ghats','Kerala Backwaters'],
+      food:['Butter Chicken','Biryani','Chole Bhature','Masala Dosa','Rogan Josh','Dhokla','Pani Puri','Jalebi'],
+    },
     default: {
       currency:'Local currency', visa:'Check your embassy', language:'Local language',
       tz:'Local timezone', plug:'Universal adapter recommended', sos:'112',
@@ -1606,7 +1613,7 @@
     },
     {
       id: 'generate',
-      ai: (_t,p) => `All set! 🎯 Generating your personalised <strong>${p.duration}-day itinerary</strong> with full ₹ budget breakdown…\n\n⏳ This takes about 20 seconds while I research the best plan for you.`,
+      ai: (_t,p) => `All set! 🎯 Generating your personalised <strong>${p.duration}-day itinerary</strong> with full ₹ budget breakdown using <strong>Grok AI</strong>…\n\n⏳ This takes about 20 seconds while I build the best plan for you.`,
       chips: [], key: null, multi: false, free: false
     }
   ];
@@ -1807,6 +1814,7 @@
         </div>
         <div class="tap-itin-btns">
           <button class="tap-btn-sm tap-btn-save" id="tapSaveBtn"><i class="fas fa-save"></i> Save</button>
+          <button class="tap-btn-sm" id="tapPdfBtn"><i class="fas fa-file-pdf"></i> PDF</button>
           <button class="tap-btn-sm" id="tapPrintBtn"><i class="fas fa-print"></i> Print</button>
           <button class="tap-btn-sm" id="tapShareBtn"><i class="fas fa-share-alt"></i> Share</button>
         </div>
@@ -1831,6 +1839,7 @@
       document.getElementById('tapSend')?.addEventListener('click', () => this.handleInput());
       document.getElementById('tapTxt')?.addEventListener('keypress', e => { if (e.key==='Enter') this.handleInput(); });
       document.getElementById('tapSaveBtn')?.addEventListener('click', () => this.saveItinerary());
+      document.getElementById('tapPdfBtn')?.addEventListener('click', () => this.downloadItineraryPdf());
       document.getElementById('tapPrintBtn')?.addEventListener('click', () => this.printItinerary());
       document.getElementById('tapShareBtn')?.addEventListener('click', () => this.shareItinerary());
       document.getElementById('tapPackingBtn')?.addEventListener('click', () => this.goToPacking());
@@ -2007,19 +2016,35 @@
         .replace(/'/g, '&#39;');
     },
 
-    getGroqKey() {
-      return (window.GROQ_API_KEY || '').trim();
+    getGrokKey() {
+      return (window.GROK_API_KEY || '').trim();
     },
 
-    parseGroqText(data) {
+    parseAiText(data) {
       const content = data?.choices?.[0]?.message?.content;
       if (typeof content === 'string' && content.trim()) return content.trim();
       return null;
     },
 
-    async askGroqFollowUp(question) {
-      const groqKey = this.getGroqKey();
-      if (!groqKey) return null;
+    parseLooseJson(text) {
+      if (!text || typeof text !== 'string') return null;
+      const cleaned = text.trim();
+      try {
+        return JSON.parse(cleaned);
+      } catch (_error) {
+        const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+        if (!fenced?.[1]) return null;
+        try {
+          return JSON.parse(fenced[1]);
+        } catch (_innerError) {
+          return null;
+        }
+      }
+    },
+
+    async askGrokFollowUp(question) {
+      const grokKey = this.getGrokKey();
+      if (!grokKey) return null;
 
       const context = {
         trip: {
@@ -2032,14 +2057,14 @@
         preferences: this.prefs || {}
       };
 
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${groqKey}`
+          Authorization: `Bearer ${grokKey}`
         },
         body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
+          model: 'grok-2-latest',
           messages: [
             { role: 'system', content: 'You are GlobeMate AI itinerary assistant. Answer trip follow-up questions clearly and practically. Keep replies under 120 words.' },
             { role: 'user', content: `Trip context: ${JSON.stringify(context)}` },
@@ -2052,11 +2077,299 @@
 
       if (!response.ok) {
         const detail = await response.text().catch(() => '');
-        throw new Error(`Groq request failed: ${response.status} ${detail}`);
+        throw new Error(`Grok request failed: ${response.status} ${detail}`);
       }
 
       const data = await response.json();
-      return this.parseGroqText(data);
+      return this.parseAiText(data);
+    },
+
+    buildGrokItineraryContext() {
+      const facts = getFacts(this.trip.destination);
+      const days = this.prefs.duration || 5;
+      const pax = this.prefs.travelers || this.trip.passengers || 1;
+      const tier = getTier(this.prefs.budget, this.prefs.accommodation);
+      const accom = buildAccom(this.prefs.accommodation, tier);
+      const budget = buildBudget(tier, days, pax, this.trip.travelMode, accom, this.prefs.budget);
+
+      return {
+        facts,
+        days,
+        pax,
+        tier,
+        accom,
+        budget,
+        context: {
+          trip: {
+            destination: this.trip.destination || '',
+            tripDate: this.trip.tripDate || '',
+            departureCity: this.trip.departureCity || '',
+            travelMode: this.trip.travelMode || '',
+            passengers: this.trip.passengers || ''
+          },
+          preferences: this.prefs || {},
+          referenceFacts: {
+            language: facts.language,
+            currency: facts.currency,
+            visa: facts.visa,
+            timezone: facts.tz,
+            plug: facts.plug,
+            sos: facts.sos,
+            bestSeason: facts.best,
+            attractions: facts.places,
+            food: facts.food
+          },
+          budgetInr: {
+            total: Math.round(budget.totalINR),
+            perNight: Math.round(budget.nightlyINR),
+            pax,
+            days,
+            accommodation: accom.name
+          }
+        }
+      };
+    },
+
+    normalizeGrokPlan(raw, dayCount) {
+      if (!raw || typeof raw !== 'object') return null;
+      const validPeriods = ['morning', 'afternoon', 'evening'];
+      const normalizedDays = (Array.isArray(raw.days) ? raw.days : [])
+        .map((day) => {
+          const slots = (Array.isArray(day?.slots) ? day.slots : [])
+            .map((slot) => {
+              const periodRaw = String(slot?.period || '').toLowerCase();
+              const period = validPeriods.includes(periodRaw) ? periodRaw : 'morning';
+              const items = (Array.isArray(slot?.items) ? slot.items : [])
+                .map((item) => String(item || '').trim())
+                .filter(Boolean)
+                .slice(0, 5);
+              if (!items.length) return null;
+
+              return {
+                period,
+                label: String(slot?.label || period.charAt(0).toUpperCase() + period.slice(1)).trim(),
+                emoji: String(slot?.emoji || '').trim(),
+                items
+              };
+            })
+            .filter(Boolean);
+
+          if (!slots.length) return null;
+          return {
+            title: String(day?.title || 'Travel Day').trim(),
+            emoji: String(day?.emoji || '').trim(),
+            stay: day?.stay !== false,
+            slots: slots.slice(0, 3)
+          };
+        })
+        .filter(Boolean)
+        .slice(0, dayCount);
+
+      if (!normalizedDays.length) return null;
+
+      return {
+        localFood: Array.isArray(raw.localFood) ? raw.localFood.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 10) : [],
+        attractions: Array.isArray(raw.attractions) ? raw.attractions.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 12) : [],
+        packing: Array.isArray(raw.packing) ? raw.packing.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 12) : [],
+        tips: Array.isArray(raw.tips) ? raw.tips.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 12) : [],
+        transportTips: Array.isArray(raw.transportTips)
+          ? raw.transportTips.map((tip) => ({
+            label: String(tip?.label || '').trim(),
+            value: String(tip?.value || '').trim(),
+            icon: String(tip?.icon || 'route').trim()
+          })).filter((tip) => tip.label && tip.value).slice(0, 8)
+          : [],
+        days: normalizedDays
+      };
+    },
+
+    async askGrokForItinerary() {
+      const grokKey = this.getGrokKey();
+      if (!grokKey) return null;
+
+      const { context, days } = this.buildGrokItineraryContext();
+      const systemPrompt = [
+        'You are GlobeMate itinerary planner.',
+        'Return strict JSON only. Do not use markdown fences.',
+        `Build exactly ${days} days in days[].`,
+        'Each day must contain morning, afternoon and evening slots.',
+        'Each slot must include 3 to 5 specific activity items.',
+        'Prioritize famous landmarks and top places from referenceFacts.attractions.',
+        'Distribute landmarks across days with city-wise flow (for example: Day 1 Agra/Taj Mahal, Day 2 Delhi landmarks when destination is India).',
+        'Every day title must mention the city/area plus focus (landmark or theme).',
+        'Avoid generic entries like "explore city" unless paired with named places.',
+        'Keep advice practical and realistic for travelers.',
+        'Schema:',
+        '{"localFood":[],"attractions":[],"packing":[],"tips":[],"transportTips":[{"label":"","value":"","icon":"route"}],"days":[{"title":"","emoji":"","stay":true,"slots":[{"period":"morning|afternoon|evening","label":"","emoji":"","items":[""]}]}]}'
+      ].join(' ');
+
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${grokKey}`
+        },
+        body: JSON.stringify({
+          model: 'grok-2-latest',
+          temperature: 0.35,
+          max_tokens: 2200,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Trip context JSON: ${JSON.stringify(context)}` }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(`Grok itinerary request failed: ${response.status} ${detail}`);
+      }
+
+      const data = await response.json();
+      const text = this.parseAiText(data);
+      const parsed = this.parseLooseJson(text);
+      return this.normalizeGrokPlan(parsed, days);
+    },
+
+    renderItineraryFromPlan(plan) {
+      const { facts, days, pax, accom, budget } = this.buildGrokItineraryContext();
+      const dest = this.trip.destination || 'your destination';
+      const purpose = this.prefs.purpose || 'tourism';
+      const tier = getTier(this.prefs.budget, this.prefs.accommodation);
+      const fallbackPlans = makeDayPlans(dest, days, facts, this.prefs, purpose, tier, accom, /honeymoon|romance/i.test(purpose), /business|work/i.test(purpose), /adventure|outdoor/i.test(purpose));
+      const dayPlans = Array.isArray(plan?.days) && plan.days.length ? plan.days : fallbackPlans;
+      const food = (plan?.localFood?.length ? plan.localFood : facts.food).slice(0, 10);
+      const attractions = (plan?.attractions?.length ? plan.attractions : facts.places).slice(0, 12);
+      const packing = (plan?.packing?.length ? plan.packing : getPacking(purpose, facts)).slice(0, 12);
+      const tips = (plan?.tips?.length ? plan.tips : [
+        `Best time to visit ${dest}: ${facts.best}`,
+        `Book ${accom.name} in advance for better rates.`,
+        `Carry some ${facts.currency} cash for local markets and taxis.`,
+        `Emergency helpline in ${dest}: ${facts.sos}`
+      ]).slice(0, 12);
+
+      let out = '';
+      out += `<div class="tap-overview">`;
+      [
+        ['globe-europe', 'Destination', dest],
+        ['moon', 'Duration', `${days} Day${days > 1 ? 's' : ''}`],
+        ['wallet', 'Budget', `₹${Math.round(budget.totalINR).toLocaleString('en-IN')}`],
+        ['bed', 'Accommodation', accom.name],
+        ['language', 'Language', facts.language],
+        ['coins', 'Currency', facts.currency],
+      ].forEach(([ic, lbl, val]) => out += `
+        <div class="tap-ov-item">
+          <i class="fas fa-${ic}"></i>
+          <div><small>${lbl}</small><strong>${val}</strong></div>
+        </div>`);
+      out += `</div>`;
+
+      out += `<div class="tap-pills">
+        <div class="tap-pill"><i class="fas fa-plug"></i> Plug: ${facts.plug}</div>
+        <div class="tap-pill"><i class="fas fa-phone-alt"></i> SOS: ${facts.sos}</div>
+        <div class="tap-pill"><i class="fas fa-clock"></i> ${facts.tz}</div>
+        <div class="tap-pill"><i class="fas fa-id-card"></i> ${facts.visa}</div>
+      </div>`;
+
+      out += `<div class="tap-sec-label"><i class="fas fa-chart-pie"></i> Estimated Budget (in Rupees)</div>
+      <div class="tap-budget-grid">`;
+      budget.items.forEach((b) => {
+        out += `<div class="tap-b-item">
+          <div class="tap-b-icon" style="background:${b.color}1a;color:${b.color}"><i class="fas fa-${b.icon}"></i></div>
+          <div>
+            <span class="tap-b-cat">${b.label}</span>
+            <span class="tap-b-amt">₹${Math.round(b.usd * INR).toLocaleString('en-IN')}</span>
+          </div>
+        </div>`;
+      });
+      out += `<div class="tap-b-total">
+        <span>Total Estimated Budget (${pax} pax, ${days} days)</span>
+        <strong>₹${Math.round(budget.totalINR).toLocaleString('en-IN')}</strong>
+      </div></div>`;
+
+      out += `<div class="tap-sec-label"><i class="fas fa-map-signs"></i> Day-by-Day Itinerary</div>
+      <div class="tap-days">`;
+
+      dayPlans.slice(0, days).forEach((day, i) => {
+        let dateStr = '';
+        if (this.trip.tripDate) {
+          const d = new Date(this.trip.tripDate);
+          d.setDate(d.getDate() + i);
+          dateStr = d.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+
+        out += `<div class="tap-day">
+          <div class="tap-day-hdr">
+            <div class="tap-day-num">Day ${i + 1}</div>
+            <div class="tap-day-ti">${day.emoji ? day.emoji + ' ' : ''}${day.title}</div>
+            ${dateStr ? `<div class="tap-day-dt">${dateStr}</div>` : ''}
+          </div>`;
+
+        if (day.slots && day.slots.length) {
+          out += `<div class="tap-day-body">`;
+          day.slots.forEach((slot) => {
+            const pc = slot.period || 'morning';
+            out += `<div class="tap-slot">
+              <div class="tap-slot-tag ${pc}"><i class="fas fa-${pc === 'morning' ? 'sun' : pc === 'afternoon' ? 'cloud-sun' : 'moon'}"></i> ${slot.emoji || ''} ${slot.label || pc}</div>
+              <div class="tap-slot-items">`;
+            (slot.items || []).forEach((item) => {
+              out += `<div class="tap-slot-item"><i class="fas fa-chevron-right"></i> ${item}</div>`;
+            });
+            out += `</div></div>`;
+          });
+          out += `</div>`;
+        }
+
+        if (day.stay) {
+          out += `<div class="tap-day-stay">
+            <i class="fas fa-bed"></i>
+            <span>Stay: <strong>${accom.name}</strong></span>
+            <span class="tap-day-stay-price">₹${budget.nightlyINR.toLocaleString('en-IN')}/night</span>
+          </div>`;
+        }
+
+        out += `</div>`;
+      });
+      out += `</div>`;
+
+      out += `<div class="tap-sec-label"><i class="fas fa-utensils"></i> Local Food to Try</div>
+      <div class="tap-food-grid">`;
+      food.forEach((dish) => {
+        out += `<div class="tap-food-item"><i class="fas fa-drumstick-bite"></i>${dish}</div>`;
+      });
+      out += `</div>`;
+
+      out += `<div class="tap-sec-label"><i class="fas fa-star"></i> Must-Visit Attractions</div>
+      <div class="tap-hl-wrap">`;
+      attractions.forEach((place, i) => {
+        out += `<div class="tap-hl-chip"><span class="tap-hl-n">${i + 1}</span>${place}</div>`;
+      });
+      out += `</div>`;
+
+      out += `<div class="tap-sec-label"><i class="fas fa-suitcase-rolling"></i> Packing Essentials</div>
+      <div class="tap-pack-grid">`;
+      packing.forEach((item) => {
+        out += `<div class="tap-pack-item"><i class="fas fa-check-circle"></i>${item}</div>`;
+      });
+      out += `</div>`;
+
+      if (plan?.transportTips?.length) {
+        out += `<div class="tap-sec-label"><i class="fas fa-plane-departure"></i> Travel Tips (Route Specific)</div>
+        <div class="tap-route-card"><div class="tap-route-grid">`;
+        plan.transportTips.forEach((tip) => {
+          out += `<div class="tap-route-item"><i class="fas fa-${tip.icon || 'route'}"></i><div><strong>${tip.label}:</strong> ${tip.value}</div></div>`;
+        });
+        out += `</div></div>`;
+      }
+
+      out += `<div class="tap-sec-label"><i class="fas fa-info-circle"></i> AI Travel Tips</div>
+      <ul class="tap-tips-ul">`;
+      tips.forEach((tip) => {
+        out += `<li><i class="fas fa-bolt"></i> ${tip}</li>`;
+      });
+      out += `</ul>`;
+
+      return out;
     },
 
     async handleFollowUpQuestion(question) {
@@ -2064,7 +2377,7 @@
       this.showTyping();
 
       try {
-        const answer = await this.askGroqFollowUp(question);
+        const answer = await this.askGrokFollowUp(question);
         this.hideTyping();
         if (answer) {
           this.addMsg('ai', this.escapeHtml(answer));
@@ -2072,13 +2385,13 @@
         }
       } catch (error) {
         this.hideTyping();
-        console.warn('Trip follow-up Groq request failed:', error);
-        this.addMsg('ai', `I could not reach Groq right now (${this.escapeHtml(error.message || 'request failed')}). Try again in a moment.`);
+        console.warn('Trip follow-up Grok request failed:', error);
+        this.addMsg('ai', `I could not reach Grok right now (${this.escapeHtml(error.message || 'request failed')}). Try again in a moment.`);
         return;
       }
 
       this.hideTyping();
-      this.addMsg('ai', 'Groq key is not configured for follow-up Q&A. Please set window.GROQ_API_KEY in your local config.');
+      this.addMsg('ai', 'Grok key is not configured for follow-up Q&A. Please set window.GROK_API_KEY in your local config.');
     },
 
     processAnswer(s, answer) {
@@ -2131,9 +2444,20 @@
       }, 1000);
     },
 
-    showItinerary() {
+    async showItinerary() {
       try {
-        const html    = generateItinerary(this.trip, this.prefs);
+        let html = '';
+        try {
+          const plan = await this.askGrokForItinerary();
+          html = plan ? this.renderItineraryFromPlan(plan) : '';
+        } catch (aiError) {
+          console.warn('Grok itinerary generation failed, using local fallback:', aiError);
+        }
+
+        if (!html) {
+          html = generateItinerary(this.trip, this.prefs);
+        }
+
         this.generatedHTML = html;
 
         const card    = document.getElementById('tapItinCard');
@@ -2156,11 +2480,100 @@
 
         card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-        this.addMsg('ai', `✅ Your <strong>${this.prefs.duration||5}-day ${this.trip.destination||''} itinerary</strong> is ready with a full ₹ budget breakdown! 🎉\n\nScroll down to explore it. Use <strong>Save</strong> to store it, <strong>Print</strong> for a PDF, or <strong>Restart</strong> to adjust anything.`);
+        this.addMsg('ai', `✅ Your <strong>${this.prefs.duration||5}-day ${this.trip.destination||''} itinerary</strong> is ready with a full ₹ budget breakdown! 🎉\n\nScroll down to explore it. Use <strong>Save</strong> to store it, <strong>PDF</strong> to download it, <strong>Print</strong> for paper output, or <strong>Restart</strong> to adjust anything.`);
         this.addMsg('ai', 'Ask me anything else about your plan, transport, costs, or local tips.');
       } catch (err) {
         console.error('GlobeMate AI — itinerary generation error:', err);
         this.addMsg('ai', `⚠️ Oops! Something went wrong while generating your itinerary. Please click <strong>Restart</strong> and try again.`);
+      }
+    },
+
+    loadExternalScript(url) {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${url}"]`);
+        if (existing) {
+          if (existing.dataset.loaded === 'true') {
+            resolve();
+            return;
+          }
+          existing.addEventListener('load', () => resolve(), { once: true });
+          existing.addEventListener('error', () => reject(new Error(`Failed to load ${url}`)), { once: true });
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.onload = () => {
+          script.dataset.loaded = 'true';
+          resolve();
+        };
+        script.onerror = () => reject(new Error(`Failed to load ${url}`));
+        document.head.appendChild(script);
+      });
+    },
+
+    async ensurePdfDependencies() {
+      if (!window.html2canvas) {
+        await this.loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      }
+      if (!window.jspdf?.jsPDF) {
+        await this.loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      }
+    },
+
+    async downloadItineraryPdf() {
+      const body = document.getElementById('tapItinBody');
+      if (!body || !this.generatedHTML) return;
+
+      const btn = document.getElementById('tapPdfBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Building...';
+      }
+
+      try {
+        await this.ensurePdfDependencies();
+        const canvas = await window.html2canvas(body, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 8;
+        const usableWidth = pageWidth - margin * 2;
+        const imageHeight = (canvas.height * usableWidth) / canvas.width;
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+        let heightLeft = imageHeight;
+        let y = margin;
+        pdf.addImage(imgData, 'JPEG', margin, y, usableWidth, imageHeight, undefined, 'FAST');
+        heightLeft -= (pageHeight - margin * 2);
+
+        while (heightLeft > 0) {
+          pdf.addPage();
+          y = margin - (imageHeight - heightLeft);
+          pdf.addImage(imgData, 'JPEG', margin, y, usableWidth, imageHeight, undefined, 'FAST');
+          heightLeft -= (pageHeight - margin * 2);
+        }
+
+        const fileDest = (this.trip.destination || 'trip').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+        const fileDays = this.prefs.duration || 5;
+        pdf.save(`globemate-${fileDest}-${fileDays}d-itinerary.pdf`);
+        if (typeof showToast === 'function') showToast('PDF downloaded successfully!', 'success');
+      } catch (error) {
+        console.error('PDF generation failed:', error);
+        if (typeof showToast === 'function') showToast('Could not generate PDF. Try Print as backup.', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-file-pdf"></i> PDF';
+        }
       }
     },
 

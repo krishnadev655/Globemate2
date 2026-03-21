@@ -11,5 +11,6 @@
   };
 
   window.TOMORROW_IO_API_KEY = window.TOMORROW_IO_API_KEY || '';
+  window.GROK_API_KEY = window.GROK_API_KEY || '';
   window.GROQ_API_KEY = window.GROQ_API_KEY || '';
 })();
